@@ -18,6 +18,7 @@ from mealie.db.models.recipe.recipe import RecipeModel
 from mealie.db.models.recipe.settings import RecipeSettings
 from mealie.db.models.recipe.tag import Tag
 from mealie.db.models.recipe.tool import Tool, households_to_tools, recipes_to_tools
+from mealie.db.models.users.user_recipe_feedback import UserRecipeFeedback
 from mealie.db.models.users.user_to_recipe import UserToRecipe
 from mealie.db.models.users.users import User
 from mealie.schema.cookbook.cookbook import ReadCookBook
@@ -110,10 +111,14 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
     def _delete_recipe(self, recipe: RecipeModel) -> Recipe:
         recipe_as_model = self.schema.model_validate(recipe)
 
-        # first remove UserToRecipe entries so we don't run into stale data errors
+        # first remove UserToRecipe and UserRecipeFeedback entries so we don't run into stale data errors
         try:
             user_to_recipe_delete_query = sa.delete(UserToRecipe).where(UserToRecipe.recipe_id == recipe.id)
             self.session.execute(user_to_recipe_delete_query)
+
+            feedback_delete_query = sa.delete(UserRecipeFeedback).where(UserRecipeFeedback.recipe_id == recipe.id)
+            self.session.execute(feedback_delete_query)
+
             self.session.commit()
         except Exception:
             self.session.rollback()

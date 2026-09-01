@@ -15,12 +15,19 @@
             <v-card-title class="text-h5 font-weight-regular pa-0 text-wrap text-center opacity-80">
               {{ recipe.name }}
             </v-card-title>
-            <RecipeRating
-              :key="recipe.slug"
-              :model-value="recipe.rating"
-              :recipe-id="recipe.id"
-              :slug="recipe.slug"
-            />
+            <div class="d-flex flex-wrap align-center justify-center">
+              <RecipeRating
+                :key="recipe.slug"
+                :model-value="recipe.rating"
+                :recipe-id="recipe.id"
+                :slug="recipe.slug"
+              />
+              <RecipeFeedbackButtons
+                :recipe-id="recipe.id"
+                :slug="recipe.slug"
+                class="ml-2"
+              />
+            </div>
           </div>
           <v-divider class="my-2" />
           <SafeMarkdown :source="recipe.description" class="my-3" />
@@ -79,6 +86,7 @@
 <script setup lang="ts">
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
+import RecipeFeedbackButtons from "~/components/Domain/Recipe/RecipeFeedbackButtons.vue";
 import RecipeLastMade from "~/components/Domain/Recipe/RecipeLastMade.vue";
 import RecipeTimeCard from "~/components/Domain/Recipe/RecipeTimeCard.vue";
 import RecipeYield from "~/components/Domain/Recipe/RecipeYield.vue";

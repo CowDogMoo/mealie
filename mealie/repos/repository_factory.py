@@ -37,6 +37,7 @@ from mealie.db.models.recipe.tag import Tag
 from mealie.db.models.recipe.tool import Tool
 from mealie.db.models.users import LongLiveToken, User
 from mealie.db.models.users.password_reset import PasswordResetModel
+from mealie.db.models.users.user_recipe_feedback import UserRecipeFeedback
 from mealie.db.models.users.user_to_recipe import UserToRecipe
 from mealie.repos.repository_ai_provider import GroupRepositoryAIProvider
 from mealie.repos.repository_cookbooks import RepositoryCookbooks
@@ -72,6 +73,7 @@ from mealie.schema.recipe.recipe_timeline_events import RecipeTimelineEventOut
 from mealie.schema.reports.reports import ReportEntryOut, ReportOut
 from mealie.schema.user import GroupInDB, LongLiveTokenInDB, PrivateUser
 from mealie.schema.user.user import UserRatingOut
+from mealie.schema.user.user_feedback import UserFeedbackOut
 from mealie.schema.user.user_passwords import PrivatePasswordResetToken
 
 from ._utils import NOT_SET, NotSet
@@ -80,7 +82,7 @@ from .repository_group import RepositoryGroup
 from .repository_meals import RepositoryMeals
 from .repository_recipes import RepositoryRecipes
 from .repository_shopping_list import RepositoryShoppingList
-from .repository_users import RepositoryUserRatings, RepositoryUsers
+from .repository_users import RepositoryUserFeedback, RepositoryUserRatings, RepositoryUsers
 
 PK_ID = "id"
 PK_SLUG = "slug"
@@ -186,6 +188,10 @@ class AllRepositories:
     @cached_property
     def user_ratings(self) -> RepositoryUserRatings:
         return RepositoryUserRatings(self.session, PK_ID, UserToRecipe, UserRatingOut, group_id=self.group_id)
+
+    @cached_property
+    def user_feedback(self) -> RepositoryUserFeedback:
+        return RepositoryUserFeedback(self.session, PK_ID, UserRecipeFeedback, UserFeedbackOut, group_id=self.group_id)
 
     @cached_property
     def api_tokens(self) -> GroupRepositoryGeneric[LongLiveTokenInDB, LongLiveToken]:

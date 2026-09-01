@@ -36,6 +36,14 @@ from .user import (
     UserSummary,
     UserSummaryPagination,
 )
+from .user_feedback import (
+    HouseholdUserFeedbackOut,
+    HouseholdUserRatingOut,
+    UserFeedbackCreate,
+    UserFeedbackIn,
+    UserFeedbackOut,
+    UserFeedbacks,
+)
 from .user_passwords import (
     ForgotPassword,
     PasswordResetToken,
@@ -85,4 +93,10 @@ __all__ = [
     "ResetPassword",
     "SavePasswordResetToken",
     "ValidateResetToken",
+    "HouseholdUserFeedbackOut",
+    "HouseholdUserRatingOut",
+    "UserFeedbackCreate",
+    "UserFeedbackIn",
+    "UserFeedbackOut",
+    "UserFeedbacks",
 ]

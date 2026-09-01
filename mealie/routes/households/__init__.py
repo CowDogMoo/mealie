@@ -4,6 +4,7 @@ from . import (
     controller_cookbooks,
     controller_group_notifications,
     controller_group_recipe_actions,
+    controller_household_feedback,
     controller_household_self_service,
     controller_invitations,
     controller_mealplan,
@@ -17,6 +18,7 @@ router = APIRouter()
 router.include_router(controller_cookbooks.router)
 router.include_router(controller_group_notifications.router)
 router.include_router(controller_group_recipe_actions.router)
+router.include_router(controller_household_feedback.router)
 router.include_router(controller_household_self_service.router)
 router.include_router(controller_invitations.router)
 router.include_router(controller_shopping_lists.router)
