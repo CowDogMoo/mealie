@@ -193,7 +193,7 @@ Mealie's settings resolve the data directory to `/app/data`, and the command die
 - `linux/amd64` only. Mealie runs on a Proxmox VM; there is no arm64 consumer and building one
   doubles the build time for nothing.
 - **The GHCR package is public, and making it public is a manual step.** GHCR creates a
-  brand-new package as private no matter how the repository is configured, and `GITHUB_TOKEN`
+  brand-new package as private when the repository is private, and `GITHUB_TOKEN`
   can push to a package but cannot change its visibility. So the first time anyone pushes a
   fork image, go to GitHub → the `cowdogmoo` org (or user) → Packages → `mealie` → Package
   settings → Change visibility → Public. One time, by hand. The alternative is giving the
@@ -205,6 +205,22 @@ with `ImagePullBackOff` on a cluster that pulls with no credentials — and ther
 the workflow log to explain it, because as far as the workflow is concerned the push
 succeeded. If a new tag will not pull, check package visibility before you check anything
 else.
+
+**Measured on the first real push (2026-09-01, `v3.24.0-woe.dev.8942dce`): the package came out
+PUBLIC with no manual step.** `CowDogMoo/mealie` is a public fork, and a package pushed by
+`GITHUB_TOKEN` inherited that visibility; `gh api /orgs/CowDogMoo/packages/container/mealie`
+reported `"visibility": "public"`, and a manifest fetch using only an anonymous pull token — no
+credentials, the way a kubelet with no pull secret does it — returned HTTP 200. An earlier draft
+of this file asserted the flip was mandatory regardless of repository visibility. That was wrong.
+
+Do not invert the error and assume it is never needed: this is one observation on one public
+repository. If the fork is ever made private, or the package is recreated under different
+settings, it can come out private again. **Check it, do not assume either way** — the check is one
+command, and the failure mode if you skip it is `ImagePullBackOff` hours after a green build:
+
+```
+gh api /orgs/CowDogMoo/packages/container/mealie --jq .visibility
+```
 
 Deployment lives in the woe repo:
 `kubernetes/apps/home-automation/mealie/app/helmrelease.yaml`.
