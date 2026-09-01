@@ -14,6 +14,15 @@ export default {
     globals: true,
     environment: "jsdom",
     setupFiles: ["./app/tests/setup.ts"],
+    server: {
+      deps: {
+        // Vuetify ships its dist modules importing their own .css, which Node's ESM loader
+        // rejects with `Unknown file extension ".css"` when the package is left external.
+        // Inlining lets Vite transform them, which is what makes it possible to mount real
+        // Vuetify components in a component test instead of hand-written stand-ins.
+        inline: ["vuetify"],
+      },
+    },
     coverage: {
       provider: "v8",
       include: ["app/{lib,components,composables,layouts,pages}/**/*.{ts,tsx,vue}"],

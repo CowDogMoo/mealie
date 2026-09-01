@@ -6,6 +6,8 @@ import type {
   LongLiveTokenOut,
   ResetPassword,
   UserBase,
+  UserFeedbackIn,
+  UserFeedbackOut,
   UserIn,
   UserOut,
   UserRatingOut,
@@ -18,6 +20,10 @@ export interface UserRatingsSummaries {
 
 export interface UserRatingsOut {
   ratings: UserRatingOut[];
+}
+
+export interface UserFeedbackListOut {
+  feedback: UserFeedbackOut[];
 }
 
 const prefix = "/api";
@@ -36,6 +42,9 @@ const routes = {
   usersIdFavoritesSlug: (id: string, slug: string) => `${prefix}/users/${id}/favorites/${slug}`,
   usersIdRatings: (id: string) => `${prefix}/users/${id}/ratings`,
   usersIdRatingsSlug: (id: string, slug: string) => `${prefix}/users/${id}/ratings/${slug}`,
+  usersIdFeedback: (id: string) => `${prefix}/users/${id}/feedback`,
+  usersIdFeedbackSlug: (id: string, slug: string) => `${prefix}/users/${id}/feedback/${slug}`,
+  usersIdFeedbackEventId: (id: string, eventId: string) => `${prefix}/users/${id}/feedback/${eventId}`,
   usersSelfFavoritesId: (id: string) => `${prefix}/users/self/favorites/${id}`,
   usersSelfRatingsId: (id: string) => `${prefix}/users/self/ratings/${id}`,
 
@@ -73,6 +82,19 @@ export class UserApi extends BaseCRUDAPI<UserIn, UserOut, UserBase> {
 
   async getSelfRatings() {
     return await this.requests.get<UserRatingsSummaries>(routes.ratingsSelf);
+  }
+
+  /** Records one feedback event on a recipe. Self only: the server 403s any other user's id. */
+  async setFeedback(id: string, slug: string, payload: UserFeedbackIn) {
+    return await this.requests.post<UserFeedbackOut>(routes.usersIdFeedbackSlug(id, slug), payload);
+  }
+
+  async getSelfFeedback(id: string) {
+    return await this.requests.get<UserFeedbackListOut>(routes.usersIdFeedback(id));
+  }
+
+  async deleteFeedback(id: string, eventId: string) {
+    return await this.requests.delete<UserFeedbackOut>(routes.usersIdFeedbackEventId(id, eventId));
   }
 
   async changePassword(changePassword: ChangePassword) {

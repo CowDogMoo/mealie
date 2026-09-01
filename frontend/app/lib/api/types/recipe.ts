@@ -47,11 +47,16 @@ export interface TagBase {
 export interface CategoryIn {
   name: string;
 }
+export interface CategoryMerge {
+  fromId: string;
+  toId: string;
+}
 export interface CategoryOut {
   name: string;
   id: string;
   groupId: string;
   slug: string;
+  recipeCount?: number;
 }
 export interface CategorySave {
   name: string;
@@ -104,12 +109,14 @@ export interface RecipeCategory {
   groupId?: string | null;
   name: string;
   slug: string;
+  recipeCount?: number;
 }
 export interface RecipeTag {
   id?: string | null;
   groupId?: string | null;
   name: string;
   slug: string;
+  recipeCount?: number;
 }
 export interface CreateRecipeByUrlBulk {
   imports: CreateRecipeBulk[];
@@ -267,6 +274,7 @@ export interface RecipeTool {
   groupId?: string | null;
   name: string;
   slug: string;
+  recipeCount?: number;
   householdsWithTool?: string[];
 }
 export interface RecipeStep {
@@ -535,11 +543,16 @@ export interface SlugResponse {}
 export interface TagIn {
   name: string;
 }
+export interface TagMerge {
+  fromId: string;
+  toId: string;
+}
 export interface TagOut {
   name: string;
   groupId: string;
   id: string;
   slug: string;
+  recipeCount?: number;
 }
 export interface TagSave {
   name: string;

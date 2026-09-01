@@ -1202,5 +1202,44 @@
     "mark-all-as-read": "Mark All as Read",
     "show-announcements-from-mealie": "Show announcements from Mealie",
     "show-announcements-setting-description": "Whether or not you want to allow users to see announcements from Mealie. When enabled users can still opt-out from seeing them in their user settings"
+  },
+  "feedback": {
+    "title": "Not for me",
+    "submit": "Save",
+    "cancel": "Cancel",
+    "thumbs-up": "I'd eat this again",
+    "thumbs-down": "Not for me",
+    "reason-label": "What put you off?",
+    "scope-label": "How far does this go?",
+    "apply-wider": "Let this apply more widely than the reason supports",
+    "advisory": "We'll save this, but mark it advisory: the reason you picked doesn't reach that wide on its own. Say it again another night and it starts to count.",
+    "advisory-tag": "advisory",
+    "note": "Anything else? (optional)",
+    "target": "What exactly?",
+    "target-dish": "Which dish?",
+    "target-ingredient": "Which ingredient?",
+    "target-cuisine": "Which kind of food?",
+    "target-source": "Which site or cookbook?",
+    "reasons": {
+      "i-did-not-like-this-recipe": "I didn't like this recipe",
+      "i-do-not-like-this-dish": "I don't like this dish, however it's made",
+      "i-do-not-like-a-specific-ingredient": "There's an ingredient in it I don't like",
+      "too-much-work": "Too much work",
+      "took-too-long": "Took too long",
+      "too-heavy": "Too heavy",
+      "not-flavorful-enough": "Not enough flavor",
+      "too-spicy": "Too spicy",
+      "too-repetitive": "We've had this too often",
+      "bad-source": "This site's recipes keep letting us down",
+      "did-not-work-for-our-household": "Didn't work for our household",
+      "other": "Something else"
+    },
+    "scopes": {
+      "recipe": "Just this recipe",
+      "dish": "Any version of this dish",
+      "ingredient": "Anything with this ingredient",
+      "cuisine": "This kind of food",
+      "source": "Anything from this source"
+    }
   }
 }
