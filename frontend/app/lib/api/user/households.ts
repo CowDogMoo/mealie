@@ -1,7 +1,7 @@
 import { BaseCRUDAPIReadOnly } from "../base/base-clients";
 import type { PaginationData } from "../types/non-generated";
 import type { QueryValue } from "../base/route";
-import type { UserOut } from "~/lib/api/types/user";
+import type { HouseholdUserFeedbackOut, HouseholdUserRatingOut, UserOut } from "~/lib/api/types/user";
 import type {
   HouseholdInDB,
   HouseholdStatistics,
@@ -14,6 +14,22 @@ import type {
   HouseholdRecipeSummary,
 } from "~/lib/api/types/household";
 
+/** Filters for `GET /api/households/feedback`. Each one only narrows the caller's own household. */
+export interface HouseholdFeedbackParams {
+  recipeId?: string;
+  /** ISO-8601 instant; only events created at or after it are returned. */
+  since?: string;
+  vote?: string;
+}
+
+export interface HouseholdFeedbackListOut {
+  feedback: HouseholdUserFeedbackOut[];
+}
+
+export interface HouseholdRatingsListOut {
+  ratings: HouseholdUserRatingOut[];
+}
+
 const prefix = "/api";
 
 const routes = {
@@ -21,6 +37,8 @@ const routes = {
   householdsSelf: `${prefix}/households/self`,
   members: `${prefix}/households/members`,
   permissions: `${prefix}/households/permissions`,
+  feedback: `${prefix}/households/feedback`,
+  ratings: `${prefix}/households/ratings`,
 
   preferences: `${prefix}/households/preferences`,
   statistics: `${prefix}/households/statistics`,
@@ -63,5 +81,20 @@ export class HouseholdAPI extends BaseCRUDAPIReadOnly<HouseholdSummary> {
 
   async statistics() {
     return await this.requests.get<HouseholdStatistics>(routes.statistics);
+  }
+
+  /** Every household member's feedback events, oldest first. Read-only; writes stay self-only. */
+  async getHouseholdFeedback(params: HouseholdFeedbackParams = {}) {
+    // an unset filter must not travel as the literal string "undefined"
+    const query = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v !== null && v !== undefined),
+    ) as Record<string, QueryValue>;
+
+    return await this.requests.get<HouseholdFeedbackListOut>(routes.feedback, query);
+  }
+
+  /** Every household member's star ratings, grouped by member in username order. */
+  async getHouseholdRatings() {
+    return await this.requests.get<HouseholdRatingsListOut>(routes.ratings);
   }
 }

@@ -1,13 +1,17 @@
 import random
 import shutil
+from collections.abc import Sequence
+from datetime import datetime
 
 from pydantic import UUID4
 from sqlalchemy import select
 
 from mealie.assets import users as users_assets
 from mealie.core.config import get_app_settings
+from mealie.db.models.users.user_recipe_feedback import UserRecipeFeedback
 from mealie.db.models.users.user_to_recipe import UserToRecipe
 from mealie.schema.user.user import PrivateUser, UserRatingOut
+from mealie.schema.user.user_feedback import UserFeedbackOut
 
 from ..db.models.users import User
 from .repository_generic import GroupRepositoryGeneric
@@ -99,3 +103,88 @@ class RepositoryUserRatings(GroupRepositoryGeneric[UserRatingOut, UserToRecipe])
         stmt = select(UserToRecipe).filter(UserToRecipe.user_id == user_id, UserToRecipe.recipe_id == recipe_id)
         result = self.session.execute(stmt).scalars().one_or_none()
         return None if result is None else self.schema.model_validate(result)
+
+    def get_by_users(self, user_ids: Sequence[UUID4], favorites_only: bool = False) -> list[UserRatingOut]:
+        """Ratings held by any of `user_ids`, restricted to this repository's group.
+
+        `get_by_user` above is upstream's and is deliberately left alone: it backs
+        `/api/users/{id}/ratings`, which is self-only, so a user reading their own rows across
+        groups is not a disclosure. This method backs a *household* read, where the caller is
+        someone else, and there the group filter matters. A user who was moved between groups
+        keeps their old `users_to_recipes` rows, which point at the old group's recipes; without
+        the filter those rows follow them into the new household's view, which is precisely the
+        cross-group reach D4 rules out.
+        """
+
+        ids = list(user_ids)
+        if not ids:
+            return []
+
+        stmt = select(UserToRecipe).filter(UserToRecipe.user_id.in_(ids)).filter_by(**self._filter_builder())
+        if favorites_only:
+            stmt = stmt.filter(UserToRecipe.is_favorite)
+
+        results = self.session.execute(stmt).scalars().all()
+        return [self.schema.model_validate(x) for x in results]
+
+
+class RepositoryUserFeedback(GroupRepositoryGeneric[UserFeedbackOut, UserRecipeFeedback]):
+    # Since users can post events on recipes that belong to other households,
+    # this is a group repository, rather than a household repository.
+    #
+    # Both reads below carry the repository's group filter, which the ratings reads above do
+    # not. A user id says nothing about which group's recipes its events hang off, so without
+    # the filter a caller scoped to one group could read events on another group's recipes by
+    # passing the right id. The filter costs an EXISTS against `recipes`; an unscoped
+    # repository (group_id None, i.e. admin) still sees everything, as it does elsewhere.
+
+    def get_by_user(self, user_id: UUID4) -> list[UserFeedbackOut]:
+        """Every event one user has cast, oldest first."""
+
+        stmt = (
+            select(UserRecipeFeedback)
+            .filter(UserRecipeFeedback.user_id == user_id)
+            .filter_by(**self._filter_builder())
+            .order_by(UserRecipeFeedback.created_at, UserRecipeFeedback.id)
+        )
+
+        results = self.session.execute(stmt).scalars().all()
+        return [self.schema.model_validate(x) for x in results]
+
+    def get_by_users(
+        self,
+        user_ids: Sequence[UUID4],
+        recipe_id: UUID4 | None = None,
+        since: datetime | None = None,
+        vote: str | None = None,
+    ) -> list[UserFeedbackOut]:
+        """Every event cast by any of `user_ids`, oldest first.
+
+        Ordering is part of the contract, not a nicety: consumers count how often a reason has
+        been repeated over time, so the sequence has to be the one the events happened in.
+
+        Each filter is optional; None means "no filter", and only None does, so `vote=""`
+        narrows to nothing rather than quietly matching every row. Asking about nobody
+        (`user_ids=[]`) likewise returns nothing rather than the whole table.
+        """
+
+        ids = list(user_ids)
+        if not ids:
+            return []
+
+        stmt = select(UserRecipeFeedback).filter(UserRecipeFeedback.user_id.in_(ids))
+
+        if recipe_id is not None:
+            stmt = stmt.filter(UserRecipeFeedback.recipe_id == recipe_id)
+
+        if since is not None:
+            # the column is naive UTC; NaiveDateTime normalizes an aware bound on the way in
+            stmt = stmt.filter(UserRecipeFeedback.created_at >= since)
+
+        if vote is not None:
+            stmt = stmt.filter(UserRecipeFeedback.vote == vote)
+
+        stmt = stmt.filter_by(**self._filter_builder()).order_by(UserRecipeFeedback.created_at, UserRecipeFeedback.id)
+
+        results = self.session.execute(stmt).scalars().all()
+        return [self.schema.model_validate(x) for x in results]

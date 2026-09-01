@@ -110,6 +110,27 @@ export interface GroupSummary {
   preferences?: ReadGroupPreferences | null;
   aiProviderSettings?: AIProviderSettingsOut | null;
 }
+export interface HouseholdUserFeedbackOut {
+  vote: string;
+  reason?: string | null;
+  scope?: string;
+  target?: string | null;
+  note?: string | null;
+  userId: string;
+  recipeId: string;
+  advisory?: boolean;
+  id: string;
+  createdAt?: string | null;
+  username: string;
+}
+export interface HouseholdUserRatingOut {
+  recipeId: string;
+  rating?: number | null;
+  isFavorite?: boolean;
+  userId: string;
+  id: string;
+  username: string;
+}
 export interface LongLiveTokenCreateResponse {
   name: string;
   id: number;
@@ -230,6 +251,35 @@ export interface UserBase {
   canManage?: boolean;
   canManageHousehold?: boolean;
   canOrganize?: boolean;
+}
+export interface UserFeedbackCreate {
+  vote: string;
+  reason?: string | null;
+  scope?: string;
+  target?: string | null;
+  note?: string | null;
+  userId: string;
+  recipeId: string;
+  advisory?: boolean;
+}
+export interface UserFeedbackIn {
+  vote: string;
+  reason?: string | null;
+  scope?: string;
+  target?: string | null;
+  note?: string | null;
+}
+export interface UserFeedbackOut {
+  vote: string;
+  reason?: string | null;
+  scope?: string;
+  target?: string | null;
+  note?: string | null;
+  userId: string;
+  recipeId: string;
+  advisory?: boolean;
+  id: string;
+  createdAt?: string | null;
 }
 export interface UserIn {
   id?: string | null;

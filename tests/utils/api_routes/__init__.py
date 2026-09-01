@@ -89,6 +89,8 @@ households_cookbooks = "/api/households/cookbooks"
 """`/api/households/cookbooks`"""
 households_events_notifications = "/api/households/events/notifications"
 """`/api/households/events/notifications`"""
+households_feedback = "/api/households/feedback"
+"""`/api/households/feedback`"""
 households_invitations = "/api/households/invitations"
 """`/api/households/invitations`"""
 households_invitations_email = "/api/households/invitations/email"
@@ -107,6 +109,8 @@ households_permissions = "/api/households/permissions"
 """`/api/households/permissions`"""
 households_preferences = "/api/households/preferences"
 """`/api/households/preferences`"""
+households_ratings = "/api/households/ratings"
+"""`/api/households/ratings`"""
 households_recipe_actions = "/api/households/recipe-actions"
 """`/api/households/recipe-actions`"""
 households_self = "/api/households/self"
@@ -566,6 +570,21 @@ def users_id_favorites(id):
 def users_id_favorites_slug(id, slug):
     """`/api/users/{id}/favorites/{slug}`"""
     return f"{prefix}/users/{id}/favorites/{slug}"
+
+
+def users_id_feedback(id):
+    """`/api/users/{id}/feedback`"""
+    return f"{prefix}/users/{id}/feedback"
+
+
+def users_id_feedback_event_id(id, event_id):
+    """`/api/users/{id}/feedback/{event_id}`"""
+    return f"{prefix}/users/{id}/feedback/{event_id}"
+
+
+def users_id_feedback_slug(id, slug):
+    """`/api/users/{id}/feedback/{slug}`"""
+    return f"{prefix}/users/{id}/feedback/{slug}"
 
 
 def users_id_image(id):
