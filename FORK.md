@@ -162,9 +162,9 @@ above, not §7.
 
 ## Alembic facts
 
-- Base tag: `v3.24.0`.
-- Upstream head at that tag: `2187537c52b8` (the AI-providers migration).
-- Our revision: `b7d3a1f0c2e4`, `down_revision = "2187537c52b8"`, one `CREATE TABLE` for
+- Base: `mealie-next` at `14e66291` (`v3.24.0-41`), rebased 2026-08-31.
+- Upstream head at that commit: `69e942bab3aa` (the `tokens_valid_after` migration).
+- Our revision: `b7d3a1f0c2e4`, `down_revision = "69e942bab3aa"`, one `CREATE TABLE` for
   `user_recipe_feedback`.
 - **There must always be exactly one head.** `mealie/db/init_db.py` calls
   `command.upgrade(cfg, "head")` on every boot; with two heads that is ambiguous and the
@@ -177,7 +177,7 @@ PRODUCTION=false uv run alembic --config mealie/alembic/alembic.ini heads
 ```
 
 Expected output: a single line, `b7d3a1f0c2e4 (head)` (on an untouched upstream checkout it
-prints `2187537c52b8 (head)` instead). A `Secrets directory '/run/secrets' does not exist`
+prints `69e942bab3aa (head)` instead). A `Secrets directory '/run/secrets' does not exist`
 warning above it is normal on a laptop. The `PRODUCTION=false` is not decoration — without it
 Mealie's settings resolve the data directory to `/app/data`, and the command dies with
 `OSError: Read-only file system: '/app'` before alembic gets a word in.
@@ -229,15 +229,17 @@ Deployment lives in the woe repo:
 
 The fork's cost is paid at every upstream bump. Keep it mechanical and it stays cheap.
 
-1. `git fetch upstream --tags`, then branch `woe/scoped-feedback` onto the new tag
-   (`git checkout -b woe/scoped-feedback-<version> vX.Y.Z` and replay, or rebase in place —
-   either way the base is a *release tag*, never `mealie-next`).
+1. `git fetch origin`, then rebase `woe/scoped-feedback` onto `origin/mealie-next`.
+   Basing on a release tag does not avoid the alembic collision below, it only defers it:
+   PR CI tests the branch *merged into* `mealie-next`, so a tag-based branch still meets
+   every migration `mealie-next` has added since that tag, and meets it as a red build
+   rather than a local `heads` check. Rebase onto the branch you actually merge into.
 2. Resolve conflicts only in the files listed under **Conflict surface**. For the four
    generated files, take upstream wholesale and let step 5 regenerate them.
 3. Re-point our migration's `down_revision` to the new upstream head. Immediately after the
    rebase, `PRODUCTION=false uv run alembic --config mealie/alembic/alembic.ini heads` will
    print *two* revisions: ours (`b7d3a1f0c2e4`) and the new upstream head, because upstream
-   added migrations on top of the old one and ours still hangs off `2187537c52b8`. The one
+   added migrations on top of the old one and ours still hangs off the previous head. The one
    that is not ours is the new head. Edit `down_revision` in
    `mealie/alembic/versions/*b7d3a1f0c2e4*.py` to that value. Our own revision id never
    changes — the database is already stamped with it. Update the rollback target in the
@@ -289,7 +291,7 @@ needing a way back that does not exist yet.
 
 1. *Downgrade in place, then swap.* Exec into the running Mealie pod — it still has our
    image, and is therefore the only container that knows the revision — and run
-   `alembic downgrade 2187537c52b8`. One catch: the alembic config ships inside the installed
+   `alembic downgrade 69e942bab3aa`. One catch: the alembic config ships inside the installed
    package, not the working directory, so the bare CLI will not find its `.ini`. Drive it
    through alembic's API instead, which resolves the path the same way the app does at
    startup:
@@ -300,20 +302,26 @@ needing a way back that does not exist yet.
    from alembic.config import Config
    from mealie.db.init_db import ALEMBIC_DIR
    cfg = Config(str(ALEMBIC_DIR / 'alembic.ini'))
-   command.downgrade(cfg, '2187537c52b8')
+   command.downgrade(cfg, '69e942bab3aa')
    command.current(cfg)
    "
    ```
 
    (Adjust the namespace and workload name if the helmrelease renamed them.) That drops
    `user_recipe_feedback` and rewinds `alembic_version`; the trailing `command.current` prints
-   what the database is now stamped at, and it must print `2187537c52b8`. Only then change the
-   helmrelease back to `ghcr.io/mealie-recipes/mealie:v3.24.0` and reconcile. The feedback
+   what the database is now stamped at, and it must print `69e942bab3aa`. Only then change the
+   helmrelease back to an upstream image and reconcile — and note that `v3.24.0` is no longer
+   that image. `69e942bab3aa` landed on `mealie-next` on 2026-08-24, *after* the v3.24.0 tag,
+   so the released image cannot locate the revision it would be handed and fails the same way
+   the fork image does. Roll back to `ghcr.io/mealie-recipes/mealie:nightly` pinned by digest
+   to a build at or after that commit; `nightly` moves, so resolve the digest before you need
+   it, not during the incident. The feedback
    rows are gone; the stars, meal plans and recipes are not. Do this while the fork's pod is
    still up — once you have swapped the image you no longer have a container that can run the
    downgrade.
 
-   `2187537c52b8` is the target *while the fork is based on v3.24.0*. It is always whatever
+   `69e942bab3aa` is the target *while the fork is based on `mealie-next` at `14e66291`*. It
+   is always whatever
    our migration's `down_revision` currently says; check
    `mealie/alembic/versions/*b7d3a1f0c2e4*.py` if you are not sure, or use `downgrade -1`,
    which means the same thing as long as ours is the only fork migration.
