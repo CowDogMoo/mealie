@@ -154,11 +154,17 @@ class RepositoryUserFeedback(GroupRepositoryGeneric[UserFeedbackOut, UserRecipeF
     def get_by_users(
         self,
         user_ids: Sequence[UUID4],
+        *,
         recipe_id: UUID4 | None = None,
         since: datetime | None = None,
         vote: str | None = None,
     ) -> list[UserFeedbackOut]:
         """Every event cast by any of `user_ids`, oldest first.
+
+        The three filters are keyword-only, as PLAN.md section 4 writes the signature
+        (`get_by_users(user_ids, *, recipe_id, since, vote)`). Positionally they are three
+        same-shaped optionals in a row, which is exactly the argument list a caller silently gets
+        wrong; the household controller already passes them by name.
 
         Ordering is part of the contract, not a nicety: consumers count how often a reason has
         been repeated over time, so the sequence has to be the one the events happened in.
