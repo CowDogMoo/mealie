@@ -9,21 +9,31 @@ name: Woe Image
 # does locally.
 #
 # GHCR VISIBILITY DECISION (root plan D7 / P5). This pushes to
-# ghcr.io/cowdogmoo/mealie using the repository's built-in GITHUB_TOKEN. GHCR
-# publishes a brand-new package as private, and the k8s8 cluster pulls with no
-# credentials. So the package must either be made public, or the
-# `home-automation` namespace needs an imagePullSecret. We chose public: it is
-# simpler, and the image holds nothing secret - it is upstream Mealie plus our
-# feedback code.
+# ghcr.io/cowdogmoo/mealie using the repository's built-in GITHUB_TOKEN, and
+# k8s8 pulls with no credentials at all. So the package has to be anonymously
+# pullable, or the `home-automation` namespace needs an imagePullSecret. We
+# chose pullable: it is simpler, and the image holds nothing secret - it is
+# upstream Mealie plus our feedback code.
 #
-# Making it public is a ONE-TIME MANUAL STEP, done after the first successful
-# push of this workflow: GitHub -> the cowdogmoo org (or user) Packages ->
-# mealie -> Package settings -> Change visibility -> Public. It cannot be done
-# from here; GITHUB_TOKEN can push to a package, not flip its visibility.
+# MEASURED, do not assume. An earlier version of this comment asserted that
+# GHCR always creates a new package private and that a human therefore had to
+# flip it by hand. That was wrong here: CowDogMoo/mealie is a public fork, the
+# package created by the first push of this workflow came out public on its
+# own, and an anonymous manifest fetch (no credentials, the way a kubelet with
+# no pull secret does it) returned 200. Re-measured 2026-09-01 against
+# v3.24.0-woe.dev.688883b: still public, still anonymously pullable.
 #
-# Skipping that step does not fail this build. It fails the DEPLOY: the pod
-# sits in ImagePullBackOff with an unauthorized manifest pull, hours later,
-# with nothing in this workflow's log to explain it.
+# Do not invert that into an assumption either. If the fork is ever made
+# private, or the package is deleted and recreated, it can come out private
+# again - and GITHUB_TOKEN can push to a package but cannot change its
+# visibility, so the fix would be a one-off flip in the package settings (or an
+# imagePullSecret). Before the first deploy of a new package, verify:
+#
+#   gh api /orgs/CowDogMoo/packages/container/mealie --jq .visibility
+#
+# A private package does not fail this build. It fails the DEPLOY: the pod sits
+# in ImagePullBackOff on an unauthorized manifest pull, hours later, with
+# nothing in this workflow's log to explain it.
 #
 # Two more deliberate constraints:
 #   - amd64 only. Never arm64: Mealie runs on k8s8, a Proxmox VM.
@@ -161,7 +171,11 @@ jobs:
           {
             echo "Pushed \`ghcr.io/cowdogmoo/mealie:${IMAGE_TAG}\` (linux/amd64)."
             echo ""
-            echo "If the deploy comes back ImagePullBackOff, the package is still private:"
-            echo "make it public once in the GitHub package settings, or give the"
-            echo "home-automation namespace an imagePullSecret."
+            echo "If the deploy comes back ImagePullBackOff, measure the package visibility"
+            echo "before anything else - do not assume either answer:"
+            echo ""
+            echo '    gh api /orgs/CowDogMoo/packages/container/mealie --jq .visibility'
+            echo ""
+            echo "If it reports private, flip it once in the GitHub package settings, or give"
+            echo "the home-automation namespace an imagePullSecret."
           } >> "$GITHUB_STEP_SUMMARY"
