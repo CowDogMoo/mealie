@@ -124,6 +124,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              show-feedback
             />
           </v-col>
         </v-row>
@@ -148,6 +149,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              show-feedback
             />
           </v-col>
         </v-row>
