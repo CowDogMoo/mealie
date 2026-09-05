@@ -119,10 +119,11 @@ const isToday = (date: Date) => {
 }
 
 /*
-  This is the only page that passes show-feedback, so its cards carry two more buttons. From `sm`
-  up the card also shows the star strip, and favourite + stars + thumbs + menu need a card of
-  ~395px; a 340px one clips the "..." menu by 43px. Below `sm` the card hides the read-only stars
-  instead, which the row can afford to lose, so the 340px floor above still holds there.
+  These cards pass show-feedback (as the browse grids do via RecipeCardSection), so they carry
+  two more buttons. From `sm` up the card also shows the star strip, and favourite + stars +
+  thumbs + menu need a card of ~395px; a 340px one clips the "..." menu by 43px. Below `sm` the
+  card hides the read-only stars instead, which the row can afford to lose, so the 340px floor
+  above still holds there.
 */
 @media (min-width: 600px) {
   .col-borders {

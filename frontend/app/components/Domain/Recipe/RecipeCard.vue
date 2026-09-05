@@ -72,6 +72,17 @@
                 :model-value="rating"
                 :recipe-id="recipeId"
               />
+
+              <!--
+                Unlike RecipeCardMobile there is no width negotiation here: this card only renders
+                where the grid is md and up, so the row always has room for all four controls.
+              -->
+              <RecipeFeedbackButtons
+                v-if="showFeedbackControls"
+                :recipe-id="recipeId"
+                :slug="slug"
+                small
+              />
               <v-spacer />
               <!-- If we're not logged-in, no items display, so we hide this menu -->
               <RecipeContextMenu
@@ -108,6 +119,7 @@ import RecipeChips from "./RecipeChips.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
 import RecipeCardRating from "./RecipeCardRating.vue";
+import RecipeFeedbackButtons from "./RecipeFeedbackButtons.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 
 interface Props {
@@ -120,6 +132,7 @@ interface Props {
   tags?: Array<any>;
   recipeId: string;
   imageHeight?: number;
+  showFeedback?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   description: null,
@@ -128,6 +141,7 @@ const props = withDefaults(defineProps<Props>(), {
   image: undefined,
   tags: () => [],
   imageHeight: 200,
+  showFeedback: false,
 });
 
 defineEmits<{
@@ -145,6 +159,10 @@ const recipeRoute = computed<string>(() => {
   return showRecipeContent.value ? `/g/${groupSlug.value}/r/${props.slug}` : "";
 });
 const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
+
+// opt-in, and only under the same conditions that already gate the favourite badge and the
+// context menu: a logged-out or cross-group viewer has nothing to vote with
+const showFeedbackControls = computed(() => props.showFeedback && isOwnGroup.value && !!showRecipeContent.value);
 </script>
 
 <style>
