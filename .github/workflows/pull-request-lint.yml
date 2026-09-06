@@ -52,7 +52,14 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const pr = context.payload.pull_request;
+            // Fetch the live PR instead of trusting context.payload: a re-run
+            // replays the original event's frozen payload, so a body fixed
+            // after the event would still fail validation forever.
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
 
             if (pr.user.type === "Bot") {
               console.log("Skipping template check for bot");
