@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { latestFeedbackByRecipe } from "../use-users/feedback-log";
+import { downvotedRecipeIds, latestFeedbackByRecipe } from "../use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
 function event(overrides: Partial<UserFeedbackOut>): UserFeedbackOut {
@@ -60,5 +60,39 @@ describe("latestFeedbackByRecipe", () => {
     ]);
 
     expect(latest.get("recipe")?.id).toBe("dated");
+  });
+});
+
+describe("downvotedRecipeIds", () => {
+  test("collects the recipes whose current answer is down", () => {
+    const hidden = downvotedRecipeIds([
+      event({ id: "a-down", recipeId: "a", vote: "down" }),
+      event({ id: "b-up", recipeId: "b", vote: "up" }),
+      event({ id: "c-neutral", recipeId: "c", vote: "neutral" }),
+    ]);
+
+    expect([...hidden]).toEqual(["a"]);
+  });
+
+  test("a later up vote lifts an earlier down vote", () => {
+    const hidden = downvotedRecipeIds([
+      event({ id: "down", recipeId: "a", vote: "down", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-02T00:00:00" }),
+    ]);
+
+    expect(hidden.size).toBe(0);
+  });
+
+  test("a later down vote hides a recipe that was once liked", () => {
+    const hidden = downvotedRecipeIds([
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "down", recipeId: "a", vote: "down", createdAt: "2026-09-02T00:00:00" }),
+    ]);
+
+    expect(hidden.has("a")).toBe(true);
+  });
+
+  test("an empty log hides nothing", () => {
+    expect(downvotedRecipeIds([]).size).toBe(0);
   });
 });

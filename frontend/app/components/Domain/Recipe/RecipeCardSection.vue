@@ -13,6 +13,24 @@
       </v-icon>
       <span class="text-headline-small">{{ title }}</span>
       <v-spacer />
+      <v-chip
+        v-if="hiddenCount > 0"
+        :prepend-icon="showHidden ? $globals.icons.eye : $globals.icons.eyeOff"
+        :variant="showHidden ? 'tonal' : 'outlined'"
+        :color="showHidden ? 'error' : undefined"
+        class="mr-2"
+        data-test="hidden-recipes-toggle"
+        :aria-pressed="showHidden"
+        @click="showHidden = !showHidden"
+      >
+        {{ $t("feedback.hidden-count", { count: hiddenCount }) }}
+        <v-tooltip
+          activator="parent"
+          location="bottom"
+        >
+          {{ showHidden ? $t("feedback.hide-hidden") : $t("feedback.show-hidden") }}
+        </v-tooltip>
+      </v-chip>
       <v-btn
         :icon="$vuetify.display.xs"
         variant="text"
@@ -109,7 +127,7 @@
       <div class="mt-2">
         <v-row v-if="!useMobileCards">
           <v-col
-            v-for="recipe in recipes"
+            v-for="recipe in visibleRecipes"
             :key="recipe.id!"
             :sm="6"
             :md="6"
@@ -133,7 +151,7 @@
           density="comfortable"
         >
           <v-col
-            v-for="recipe in recipes"
+            v-for="recipe in visibleRecipes"
             :key="recipe.id!"
             cols="12"
             :sm="singleColumn ? '12' : '12'"
@@ -173,6 +191,8 @@ import RecipeCard from "./RecipeCard.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
+import { useUserSelfFeedback } from "~/composables/use-users";
+import { downvotedRecipeIds } from "~/composables/use-users/feedback-log";
 import type { Recipe } from "~/lib/api/types/recipe";
 import { useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
@@ -226,6 +246,18 @@ const useMobileCards = computed(() => {
 const displayTitleIcon = computed(() => {
   return props.icon || $globals.icons.tags;
 });
+
+// "Not for me" takes a recipe out of this person's grids. The recipe itself stays in the
+// household collection, so the filter is applied here on the client, per viewer, rather than in
+// the query the whole household shares. The chip in the toolbar brings the hidden ones back for
+// a look; undoing the vote lives on the feedback page.
+const { userFeedback } = useUserSelfFeedback();
+const showHidden = ref(false);
+const hiddenIds = computed(() => (isOwnGroup.value ? downvotedRecipeIds(userFeedback.value) : new Set<string>()));
+const hiddenCount = computed(() => props.recipes.filter(recipe => recipe.id && hiddenIds.value.has(recipe.id)).length);
+const visibleRecipes = computed(() =>
+  showHidden.value ? props.recipes : props.recipes.filter(recipe => !recipe.id || !hiddenIds.value.has(recipe.id)),
+);
 
 const sortLoading = ref(false);
 const randomSeed = ref(Date.now().toString());
