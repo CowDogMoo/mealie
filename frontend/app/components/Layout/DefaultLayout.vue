@@ -100,6 +100,7 @@ import { useGroupSelf } from "~/composables/use-groups";
 import { useCookbookPreferences } from "~/composables/use-users/preferences";
 import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
+import { groupLink } from "~/lib/navigation/group-link";
 
 const i18n = useI18n();
 const { $globals } = useNuxtApp();
@@ -145,7 +146,7 @@ function cookbookAsLink(cookbook: ReadCookBook): SideBarLink {
     key: cookbook.slug || "",
     icon: $globals.icons.pages,
     title: cookbook.name,
-    to: `/g/${groupSlug.value}/cookbooks/${cookbook.slug || ""}`,
+    to: groupLink(groupSlug.value, `/cookbooks/${cookbook.slug || ""}`),
     restricted: false,
   };
 }
@@ -199,7 +200,7 @@ const createLinks = computed(() => [
     icon: $globals.icons.link,
     title: i18n.t("general.import"),
     subtitle: i18n.t("new-recipe.import-by-url"),
-    to: `/g/${groupSlug.value}/r/create/url`,
+    to: groupLink(groupSlug.value, "/r/create/url"),
     restricted: true,
     hide: false,
   },
@@ -208,7 +209,7 @@ const createLinks = computed(() => [
     icon: $globals.icons.autoFix,
     title: i18n.t("recipe.import-with-ai"),
     subtitle: i18n.t("recipe.import-with-ai-subtitle"),
-    to: `/g/${groupSlug.value}/r/create/ai`,
+    to: groupLink(groupSlug.value, "/r/create/ai"),
     restricted: true,
     hide: !showAIImport.value,
   },
@@ -217,7 +218,7 @@ const createLinks = computed(() => [
     icon: $globals.icons.edit,
     title: i18n.t("general.create"),
     subtitle: i18n.t("new-recipe.create-manually"),
-    to: `/g/${groupSlug.value}/r/create/new`,
+    to: groupLink(groupSlug.value, "/r/create/new"),
     restricted: true,
     hide: false,
   },
@@ -226,13 +227,13 @@ const createLinks = computed(() => [
 const topLinks = computed<SideBarLink[]>(() => [
   {
     icon: $globals.icons.silverwareForkKnife,
-    to: `/g/${groupSlug.value}`,
+    to: groupLink(groupSlug.value),
     title: i18n.t("general.recipes"),
     restricted: false,
   },
   {
     icon: $globals.icons.search,
-    to: `/g/${groupSlug.value}/recipes/finder`,
+    to: groupLink(groupSlug.value, "/recipes/finder"),
     title: i18n.t("recipe-finder.recipe-finder"),
     restricted: false,
   },
@@ -251,12 +252,12 @@ const topLinks = computed<SideBarLink[]>(() => [
   {
     icon: $globals.icons.timelineText,
     title: i18n.t("recipe.timeline"),
-    to: `/g/${groupSlug.value}/recipes/timeline`,
+    to: groupLink(groupSlug.value, "/recipes/timeline"),
     restricted: true,
   },
   {
     icon: $globals.icons.book,
-    to: `/g/${groupSlug.value}/cookbooks`,
+    to: groupLink(groupSlug.value, "/cookbooks"),
     title: i18n.t("cookbook.cookbooks"),
     restricted: true,
   },
@@ -267,19 +268,19 @@ const topLinks = computed<SideBarLink[]>(() => [
     children: [
       {
         icon: $globals.icons.categories,
-        to: `/g/${groupSlug.value}/recipes/categories`,
+        to: groupLink(groupSlug.value, "/recipes/categories"),
         title: i18n.t("sidebar.categories"),
         restricted: true,
       },
       {
         icon: $globals.icons.tags,
-        to: `/g/${groupSlug.value}/recipes/tags`,
+        to: groupLink(groupSlug.value, "/recipes/tags"),
         title: i18n.t("sidebar.tags"),
         restricted: true,
       },
       {
         icon: $globals.icons.potSteam,
-        to: `/g/${groupSlug.value}/recipes/tools`,
+        to: groupLink(groupSlug.value, "/recipes/tools"),
         title: i18n.t("tool.tools"),
         restricted: true,
       },

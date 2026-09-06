@@ -1,6 +1,11 @@
-from starlette.requests import Request
+import re
+from datetime import timedelta
 
-from mealie.routes.auth.auth import session_cookie_attrs
+from starlette.requests import Request
+from starlette.responses import Response
+
+from mealie.core.config import get_app_settings
+from mealie.routes.auth.auth import SESSION_COOKIE_NAME, session_cookie_attrs, set_session_cookie
 
 
 def build_request(scheme: str = "http", headers: dict[str, str] | None = None) -> Request:
@@ -65,3 +70,40 @@ def test_embedded_over_plain_http_stays_lax():
 
     assert attrs["samesite"] == "lax"
     assert attrs["partitioned"] is False
+
+
+def _set_cookie_header(expires_in: timedelta, remember_me: bool) -> str:
+    response = Response()
+    set_session_cookie(response, build_request(scheme="https"), "a-token", expires_in, remember_me)
+    return response.headers["set-cookie"]
+
+
+def _max_age(header: str) -> int | None:
+    match = re.search(r"Max-Age=(\d+)", header)
+    return int(match.group(1)) if match else None
+
+
+def test_a_remembered_session_cookie_lives_exactly_as_long_as_its_token():
+    """The cookie's lifetime comes from the token it carries.
+
+    It used to be written by the client as `TOKEN_TIME` hours, independent of the token's real
+    expiry. Any deployment whose token outlived TOKEN_TIME - a remember-me login, for one - had the
+    browser discard a still-valid token and drop the user back to an anonymous session.
+    """
+    assert _max_age(_set_cookie_header(timedelta(days=14), remember_me=True)) == 14 * 24 * 60 * 60
+
+
+def test_the_cookie_tracks_the_token_even_when_it_disagrees_with_token_time():
+    """The distinguishing case: a duration TOKEN_TIME could not have produced."""
+    settings = get_app_settings()
+    odd = timedelta(hours=settings.TOKEN_TIME + 37, minutes=13)
+
+    assert _max_age(_set_cookie_header(odd, remember_me=True)) == int(odd.total_seconds())
+    assert _max_age(_set_cookie_header(odd, remember_me=True)) != settings.TOKEN_TIME * 60 * 60
+
+
+def test_without_remember_me_the_cookie_dies_with_the_browser_session():
+    header = _set_cookie_header(timedelta(days=14), remember_me=False)
+
+    assert _max_age(header) is None
+    assert SESSION_COOKIE_NAME in header
