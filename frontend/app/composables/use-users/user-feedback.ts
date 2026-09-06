@@ -55,10 +55,11 @@ export const useUserSelfFeedback = function () {
     loading.value = true;
     const api = useUserApi();
 
-    await api.users.deleteFeedback(userId, eventId);
+    const result = await api.users.deleteFeedback(userId, eventId);
 
     loading.value = false;
     await refreshUserFeedback();
+    return result;
   }
 
   if (!ready.value) {

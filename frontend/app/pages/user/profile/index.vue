@@ -99,6 +99,21 @@
             {{ $t('profile.user-settings-description') }}
           </UserProfileLinkCard>
         </v-col>
+        <v-col
+          cols="12"
+          sm="12"
+          md="6"
+        >
+          <UserProfileLinkCard
+            :link="{ text: $t('feedback.my-feedback'), to: `/user/profile/feedback` }"
+            image="/svgs/manage-recipes.svg"
+          >
+            <template #title>
+              {{ $t('feedback.my-feedback') }}
+            </template>
+            {{ $t('feedback.my-feedback-description') }}
+          </UserProfileLinkCard>
+        </v-col>
         <AdvancedOnly>
           <v-col
             cols="12"

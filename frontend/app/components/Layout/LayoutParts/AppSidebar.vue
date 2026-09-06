@@ -19,6 +19,12 @@
                 </v-icon>
                 {{ $t("user.favorite-recipes") }}
               </v-btn>
+              <v-btn v-if="isOwnGroup" class="px-2 pa-0" variant="text" to="/user/profile/feedback" size="small">
+                <v-icon start size="small">
+                  {{ $globals.icons.thumbDown }}
+                </v-icon>
+                {{ $t("feedback.thumbs-down") }}
+              </v-btn>
             </v-list-item-subtitle>
           </div>
         </div>
