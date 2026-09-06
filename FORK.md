@@ -104,7 +104,11 @@ every browse grid `RecipeCardSection.vue` draws (the recipes list, favorites, co
 search, and organizer pages), with a reason dialog. New components
 (`RecipeFeedbackButtons.vue`, `RecipeFeedbackDialog.vue`); existing components gain one prop,
 `show-feedback`, default `false`, so the change is opt-in and inert everywhere a caller does
-not switch it on.
+not switch it on. A thumbs-down also takes the recipe out of the voter's own browse grids:
+`RecipeCardSection.vue` filters, per viewer and on the client, every recipe whose current vote
+is `down`, and shows a "N not for me" chip in its toolbar that toggles them back into view. The
+recipe itself is untouched — a housemate still sees it — and the vote is undone from the My
+Recipe Feedback page (`/user/profile/feedback`), which also re-projects the star the vote wrote.
 
 **An image.** `ghcr.io/cowdogmoo/mealie`, built by `.github/workflows/woe-image.yml`.
 Upstream's publish pipeline cannot be reused: it runs through Depot.dev with the maintainers'

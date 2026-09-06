@@ -1232,6 +1232,9 @@
     "no-feedback": "You have not voted on any recipes yet.",
     "no-feedback-for-filter": "No votes match this filter.",
     "recipe-unavailable": "Recipe no longer available",
+    "hidden-count": "{count} not for me",
+    "show-hidden": "Show recipes you voted down",
+    "hide-hidden": "Hide recipes you voted down",
     "reasons": {
       "i-did-not-like-this-recipe": "I didn't like this recipe",
       "i-do-not-like-this-dish": "I don't like this dish, however it's made",

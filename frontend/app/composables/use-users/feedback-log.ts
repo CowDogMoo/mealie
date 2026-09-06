@@ -21,3 +21,21 @@ export function latestFeedbackByRecipe(events: UserFeedbackOut[]): Map<string, U
 
   return latest;
 }
+
+/**
+ * The recipes a person has, as their current answer, voted down.
+ *
+ * "Not for me" means exactly that on the browse grids: the recipe stays in the household's
+ * collection (a housemate may love it) but drops out of this person's view until they undo the
+ * vote or ask to see hidden recipes. A later up or neutral vote lifts it again.
+ */
+export function downvotedRecipeIds(events: UserFeedbackOut[]): Set<string> {
+  const hidden = new Set<string>();
+  for (const [recipeId, latest] of latestFeedbackByRecipe(events)) {
+    if (latest.vote === "down") {
+      hidden.add(recipeId);
+    }
+  }
+
+  return hidden;
+}
