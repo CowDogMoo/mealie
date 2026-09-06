@@ -32,19 +32,6 @@ _(REQUIRED)_
   If there is a UI component to the change, please include before/after images.
 -->
 
-## Which issue(s) this PR fixes:
-
-_(REQUIRED)_
-
-<!--
-If this PR fixes one of more issues, list them here.
-One per line, like so:
-Fixes #123
-Fixes #39
-
-Be sure to include the word "fixes" otherwise the associated issue will not be closed.
--->
-
 ## Special notes for your reviewer:
 
 _(fill-in or delete this section)_
@@ -60,13 +47,4 @@ _(fill-in or delete this section)_
 
 <!--
   Describe how you tested this change.
--->
-
-## AI / LLM Assistance
-
-_(REQUIRED)_
-
-<!--
-  Describe to which degree an LLM was used in creating this pull request. Failure to accurately disclose LLM usage may result in
-  review delays or closure of your PR.
 -->
