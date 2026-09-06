@@ -785,6 +785,68 @@ def test_delete_own_feedback_event(
     assert response.status_code == 404
 
 
+def test_undoing_the_only_vote_clears_the_star_it_wrote(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """An accidental thumbs-down, undone, leaves no 1-star behind to remember it by."""
+
+    caster = user_tuple[0]
+    recipe = recipe_factory(caster)
+
+    event = post_feedback(api_client, caster, recipe, vote="down", reason="too-heavy")
+    assert self_rating(api_client, caster, recipe)["rating"] == 1
+
+    response = api_client.delete(
+        api_routes.users_id_feedback_event_id(caster.user_id, event["id"]), headers=caster.token
+    )
+    assert response.status_code == 200
+
+    # 0 rather than a deleted row: the recipe page clears a star the same way
+    assert self_rating(api_client, caster, recipe)["rating"] == 0
+
+
+def test_undoing_the_latest_vote_restores_the_star_of_the_one_before(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    caster = user_tuple[0]
+    recipe = recipe_factory(caster)
+
+    post_feedback(api_client, caster, recipe, vote="up")
+    separate_events()
+    regretted = post_feedback(api_client, caster, recipe, vote="down", reason="too-spicy")
+    assert self_rating(api_client, caster, recipe)["rating"] == 1
+
+    response = api_client.delete(
+        api_routes.users_id_feedback_event_id(caster.user_id, regretted["id"]), headers=caster.token
+    )
+    assert response.status_code == 200
+    assert self_rating(api_client, caster, recipe)["rating"] == 5
+
+
+def test_undoing_a_vote_leaves_a_star_set_by_hand_alone(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """A star the person changed after voting is their last word; the undo does not overrule it."""
+
+    caster = user_tuple[0]
+    recipe = recipe_factory(caster)
+
+    event = post_feedback(api_client, caster, recipe, vote="down", reason="too-much-work")
+    response = api_client.post(
+        api_routes.users_id_ratings_slug(caster.user_id, recipe.slug),
+        json=UserRatingUpdate(rating=3).model_dump(),
+        headers=caster.token,
+    )
+    assert response.status_code == 200
+    assert self_rating(api_client, caster, recipe)["rating"] == 3
+
+    response = api_client.delete(
+        api_routes.users_id_feedback_event_id(caster.user_id, event["id"]), headers=caster.token
+    )
+    assert response.status_code == 200
+    assert self_rating(api_client, caster, recipe)["rating"] == 3
+
+
 def test_votes_set_the_caster_rating_only(
     api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
 ):

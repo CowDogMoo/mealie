@@ -128,8 +128,12 @@ class UserFeedbackController(BaseUserController):
         than a caller who guessed it is entitled to learn. The repository's group filter already
         hides other groups; this check hides other people inside the group.
 
-        The star this event wrote is left where it is: a rating is one mutable value with no
-        history, so there is nothing to roll it back to.
+        The star is re-projected from whatever this person has left to say about the recipe (D3
+        in reverse). If an older vote remains, its star wins; if nothing remains and the star
+        still reads exactly what the undone vote wrote, it is cleared, because the only reason it
+        held that value was the vote being undone. A star that has since been set by hand to
+        something else is not touched: a rating has no history, so there is nothing safer to put
+        back than what the person last chose.
         """
 
         assert_user_change_allowed(id, self.user, self.user)
@@ -141,4 +145,38 @@ class UserFeedbackController(BaseUserController):
                 detail=ErrorResponse.respond(message="Not found."),
             )
 
-        return self.repos.user_feedback.delete(event_id)
+        deleted = self.repos.user_feedback.delete(event_id)
+        self.unsync_star_rating(id, deleted)
+
+        return deleted
+
+    def unsync_star_rating(self, user_id: UUID4, undone: UserFeedbackOut) -> None:
+        """Move the caster's star back to what their remaining votes on the recipe imply.
+
+        Runs after the event is gone, so the repository read is the honest remaining log. The
+        rating is cleared with ``0`` rather than ``NULL`` because that is what the recipe page
+        writes when a person un-stars by hand, and upstream's aggregate treats both as unrated.
+        """
+
+        current = self.repos.user_ratings.get_by_user_and_recipe(user_id, undone.recipe_id)
+        if current is None:
+            return
+
+        remaining = self.repos.user_feedback.get_by_users([user_id], recipe_id=undone.recipe_id)
+        implied = next(
+            (VOTE_STAR_RATINGS[event.vote] for event in reversed(remaining) if event.vote in VOTE_STAR_RATINGS),
+            None,
+        )
+
+        if implied is not None:
+            new_rating: float = implied
+        elif current.rating == VOTE_STAR_RATINGS.get(undone.vote):
+            new_rating = 0
+        else:
+            return
+
+        if current.rating == new_rating:
+            return
+
+        current.rating = new_rating
+        self.repos.user_ratings.update(current.id, current)
