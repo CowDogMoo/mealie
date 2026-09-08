@@ -9,7 +9,10 @@ from text_unidecode import unidecode
 
 from mealie.db.db_setup import session_context
 from mealie.lang.providers import get_locale_provider
+from mealie.repos.repository_factory import AllRepositories
+from mealie.schema.recipe.recipe_ingredient import SaveIngredientUnit
 from mealie.services.parser_services import RegisteredParser, get_parser
+from mealie.services.parser_services.ingredient_parser import nlp_parser_accepts_unit
 
 
 @dataclass
@@ -110,3 +113,53 @@ async def test_nlp_parser_keeps_all_text(unique_local_group_id: UUID4, source_st
     # fuzz.ratio returns a string from 0 - 100 where 100 is an exact match
     score = fuzz.ratio(ing.display, expected_str)
     assert score >= 90, f"'{ing.display}' does not sufficiently match expected '{expected_str}'"
+
+
+@pytest.mark.parametrize(
+    ("plural", "singular"),
+    [
+        ("cup ** 2", "cup ** 2"),
+        ("cups)", "cup)"),
+        ("[cups", "[cup"),
+        ("cups", "cup\\"),
+        ("fl\\oz", "fluid ounce"),
+    ],
+)
+def test_nlp_parser_rejects_units_the_library_cannot_compile(plural: str, singular: str):
+    assert nlp_parser_accepts_unit(plural, singular) is False
+
+
+@pytest.mark.parametrize(
+    ("plural", "singular"),
+    [
+        ("cups", "cup"),
+        ("fl. oz.", "fl. oz."),
+        ("My Very Long Unit Names", "My Very Long Unit Name"),
+        ("glugs", "glug"),
+    ],
+)
+def test_nlp_parser_accepts_ordinary_units(plural: str, singular: str):
+    assert nlp_parser_accepts_unit(plural, singular) is True
+
+
+@pytest.mark.asyncio
+async def test_nlp_parser_survives_unit_with_regex_metacharacters(unique_db: AllRepositories, unique_local_group_id):
+    unique_db.ingredient_units.create_many(
+        [
+            SaveIngredientUnit(name="cup ** 2", group_id=unique_local_group_id),
+            SaveIngredientUnit(name="tbsp\\", plural_name="tbsps\\", group_id=unique_local_group_id),
+            SaveIngredientUnit(name="glug", plural_name="glugs", group_id=unique_local_group_id),
+        ]
+    )
+
+    parser = get_parser(RegisteredParser.nlp, unique_local_group_id, unique_db.session, get_locale_provider())
+
+    parsed = await parser.parse_one("2 cups all-purpose flour")
+    assert parsed.ingredient.quantity == pytest.approx(2)
+    assert parsed.ingredient.unit and parsed.ingredient.unit.name == "cup"
+    assert parsed.ingredient.food and parsed.ingredient.food.name == "all-purpose flour"
+
+    # the well-formed custom unit next to the broken ones is still handed to the library:
+    # without it the library returns no unit at all for "glugs"
+    parsed = await parser.parse_one("2 glugs olive oil")
+    assert parsed.ingredient.unit and parsed.ingredient.unit.name == "glug"

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from fractions import Fraction
+from functools import cached_property
 from itertools import zip_longest
 from typing import TYPE_CHECKING
 
@@ -30,6 +32,24 @@ from ._base import ABCIngredientParser
 from .parser_utils import extract_quantity_from_string
 
 logger = get_logger(__name__)
+
+
+def nlp_parser_accepts_unit(plural: str, singular: str) -> bool:
+    """
+    Return whether the ingredient-parser library can consume this unit.
+
+    The library interpolates unit names straight into regular expressions
+    (``\\b(<singular>)\\b``) and replacement templates (``<plural>``) without
+    escaping them. A unit such as ``cup ** 2`` therefore raises ``re.error``
+    on every sentence, which turns every parse request for the group into a
+    500 until the unit is deleted. Run the same substitution the library runs
+    so the check tracks its behaviour exactly.
+    """
+    try:
+        re.sub(rf"\b({singular})\b", plural, singular)
+    except re.error:
+        return False
+    return True
 
 
 class BruteForceParser(ABCIngredientParser):
@@ -259,20 +279,42 @@ class NLPParser(ABCIngredientParser):
 
         return self.find_ingredient_match(parsed_ingredient)
 
+    @cached_property
+    def database_units(self) -> dict[str, str]:
+        """
+        Plural -> singular map of the group's units, in the shape the
+        ingredient-parser library expects for ``custom_units``. Units whose
+        names the library cannot compile are left out and logged, so one bad
+        unit cannot break parsing for the whole group.
+        """
+        database_units: dict[str, str] = {}
+        for ingredient_unit in self.data_matcher.units_by_id.values():
+            candidates: list[tuple[str, str]] = []
+            if ingredient_unit.name:
+                candidates.append((ingredient_unit.plural_name or ingredient_unit.name, ingredient_unit.name))
+            if ingredient_unit.abbreviation:
+                candidates.append(
+                    (ingredient_unit.plural_abbreviation or ingredient_unit.abbreviation, ingredient_unit.abbreviation)
+                )
+
+            for plural, singular in candidates:
+                if not nlp_parser_accepts_unit(plural, singular):
+                    logger.warning(
+                        "Ignoring unit %r (plural %r, id %s) for the NLP parser: "
+                        "its name is not a valid regular expression",
+                        singular,
+                        plural,
+                        ingredient_unit.id,
+                    )
+                    continue
+                database_units[plural] = singular
+
+        return database_units
+
     async def parse_one(self, ingredient_string: str) -> ParsedIngredient:
         from ingredient_parser import parse_ingredient
 
-        database_units = {}
-        for ingredient_unit in self.data_matcher.units_by_id.values():
-            if ingredient_unit.name:
-                plural_name = ingredient_unit.plural_name or ingredient_unit.name
-                database_units[plural_name] = ingredient_unit.name
-
-            if ingredient_unit.abbreviation:
-                plural_abbr = ingredient_unit.plural_abbreviation or ingredient_unit.abbreviation
-                database_units[plural_abbr] = ingredient_unit.abbreviation
-
-        parsed_ingredient = parse_ingredient(ingredient_string, custom_units=database_units)
+        parsed_ingredient = parse_ingredient(ingredient_string, custom_units=self.database_units)
         return self._convert_ingredient(parsed_ingredient)
 
     async def parse(self, ingredients: list[str]) -> list[ParsedIngredient]:
