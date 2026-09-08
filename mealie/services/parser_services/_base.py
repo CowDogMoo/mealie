@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from pydantic import UUID4, BaseModel
 from sqlalchemy.orm import Session
@@ -16,6 +17,23 @@ from mealie.schema.recipe.recipe_ingredient import (
 )
 from mealie.schema.response.pagination import PaginationQuery
 from mealie.services.matching import find_match
+
+if TYPE_CHECKING:
+    import pint
+
+
+def measured_unit(name: str) -> "pint.Unit | None":
+    """
+    The measurement a unit name stands for, when pint knows it, else None.
+    """
+    import pint
+    from ingredient_parser.en._utils import convert_to_pint_unit
+
+    try:
+        result = convert_to_pint_unit(name.strip().lower())
+    except Exception:  # noqa: BLE001 - a name pint chokes on is simply not a measurement
+        return None
+    return result if isinstance(result, pint.Unit) else None
 
 
 class DataMatcher:
@@ -120,11 +138,42 @@ class DataMatcher:
 
         unit_name = unit if isinstance(unit, str) else unit.name
         match_value = IngredientUnitModel.normalize(unit_name)
-        return self.find_match(
+        if (exact := self.units_by_alias.get(match_value)) is not None:
+            return exact
+
+        candidate = self.find_match(
             match_value,
             store_map=self.units_by_alias,
             fuzzy_match_threshold=self._unit_fuzzy_match_threshold,
         )
+        if candidate is not None and not self.fuzzy_unit_match_is_safe(match_value, candidate):
+            return None
+        return candidate
+
+    @staticmethod
+    def fuzzy_unit_match_is_safe(match_value: str, candidate: IngredientUnit) -> bool:
+        """
+        String similarity puts "tablespoon" within the unit threshold of
+        "teaspoon" (ratio 77.8) and "milliliter" within "liter" (71), so a
+        household missing one of them silently gets the other, with the
+        quantity off by 3x or 1000x in the recipe and the shopping list. When
+        both sides name a measurement pint recognises, they have to be the same
+        measurement; names pint does not know (stalk, clove, package) keep the
+        plain fuzzy behaviour.
+        """
+        wanted = measured_unit(match_value)
+        if wanted is None:
+            return True
+
+        names = [
+            candidate.name,
+            candidate.plural_name,
+            candidate.abbreviation,
+            candidate.plural_abbreviation,
+            *(alias.name for alias in candidate.aliases),
+        ]
+        known = [measurement for measurement in (measured_unit(n) for n in names if n) if measurement is not None]
+        return not known or wanted in known
 
 
 class ABCIngredientParser(ABC):

@@ -10,7 +10,7 @@ from text_unidecode import unidecode
 from mealie.db.db_setup import session_context
 from mealie.lang.providers import get_locale_provider
 from mealie.repos.repository_factory import AllRepositories
-from mealie.schema.recipe.recipe_ingredient import SaveIngredientUnit
+from mealie.schema.recipe.recipe_ingredient import IngredientUnit, SaveIngredientUnit
 from mealie.services.parser_services import RegisteredParser, get_parser
 from mealie.services.parser_services.ingredient_parser import nlp_parser_accepts_unit
 
@@ -163,3 +163,57 @@ async def test_nlp_parser_survives_unit_with_regex_metacharacters(unique_db: All
     # without it the library returns no unit at all for "glugs"
     parsed = await parser.parse_one("2 glugs olive oil")
     assert parsed.ingredient.unit and parsed.ingredient.unit.name == "glug"
+
+
+@pytest.mark.parametrize(
+    ("line", "wrong_unit"),
+    [
+        ("1 tablespoon olive oil", "teaspoon"),
+        ("2 tablespoons butter", "teaspoon"),
+        ("500 milliliters water", "liter"),
+        ("4 fluid ounces cream", "ounce"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_nlp_parser_never_fuzzy_matches_one_measurement_to_another(
+    unique_db: AllRepositories, unique_local_group_id, line: str, wrong_unit: str
+):
+    # the household knows only the near-miss unit, the way a small custom unit list does
+    unique_db.ingredient_units.create_many(
+        [
+            SaveIngredientUnit(name="teaspoon", group_id=unique_local_group_id),
+            SaveIngredientUnit(name="liter", group_id=unique_local_group_id),
+            SaveIngredientUnit(name="ounce", group_id=unique_local_group_id),
+        ]
+    )
+    parser = get_parser(RegisteredParser.nlp, unique_local_group_id, unique_db.session, get_locale_provider())
+
+    parsed = await parser.parse_one(line)
+    unit = parsed.ingredient.unit
+    assert unit is not None
+    assert unit.name.lower() != wrong_unit, f"{line!r} was matched to the household's {wrong_unit!r}"
+    assert not isinstance(unit, IngredientUnit), "an unknown measurement must come back unmatched, not guessed"
+
+
+@pytest.mark.asyncio
+async def test_nlp_parser_still_fuzzy_matches_the_same_measurement_and_unmeasured_units(
+    unique_db: AllRepositories, unique_local_group_id
+):
+    unique_db.ingredient_units.create_many(
+        [
+            # no plural set: "cups" must still land on it through the fuzzy match
+            SaveIngredientUnit(name="Cup", group_id=unique_local_group_id),
+            SaveIngredientUnit(name="Stalk", group_id=unique_local_group_id),
+            SaveIngredientUnit(name="tablespoon", plural_name="tablespoons", group_id=unique_local_group_id),
+        ]
+    )
+    parser = get_parser(RegisteredParser.nlp, unique_local_group_id, unique_db.session, get_locale_provider())
+
+    cups = await parser.parse_one("2 cups flour")
+    assert isinstance(cups.ingredient.unit, IngredientUnit) and cups.ingredient.unit.name == "Cup"
+
+    stalks = await parser.parse_one("2 stalks celery")
+    assert isinstance(stalks.ingredient.unit, IngredientUnit) and stalks.ingredient.unit.name == "Stalk"
+
+    tbsp = await parser.parse_one("1 tbsp olive oil")
+    assert isinstance(tbsp.ingredient.unit, IngredientUnit) and tbsp.ingredient.unit.name == "tablespoon"
