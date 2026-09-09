@@ -365,7 +365,7 @@ def test_unknown_vote_is_422(
 
     assert own_feedback(api_client, author) == []
 
-    for vote in ("up", "down", "neutral"):
+    for vote in ("up", "down", "neutral", "refill"):
         payload = {"vote": vote, "reason": "too-heavy"} if vote == "down" else {"vote": vote}
         response = api_client.post(url, json=payload, headers=author.token)
         assert response.status_code == 201, f"{vote!r} should be an accepted vote"
@@ -899,6 +899,50 @@ def test_neutral_vote_leaves_the_caster_rating_untouched(
     # nor does it invent a star where there was none
     post_feedback(api_client, caster, unrated, vote="neutral")
     assert self_rating(api_client, caster, unrated) is None
+
+
+def test_refill_request_is_logged_but_changes_no_opinion(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """ "Find me a new one" is a request, not a vote: no reason needed, no star written or moved.
+
+    The planner reads it from the household feed like any event, and the same undo route takes
+    it back, which is why it lives in the log rather than on some separate endpoint.
+    """
+
+    caster, housemate = user_tuple
+    liked = recipe_factory(caster)
+    unrated = recipe_factory(caster)
+
+    post_feedback(api_client, caster, liked, vote="up")
+    assert self_rating(api_client, caster, liked)["rating"] == 5
+
+    event = post_feedback(api_client, caster, liked, vote="refill")
+    assert event["vote"] == "refill"
+    assert event["reason"] is None
+    assert event["scope"] == "recipe"
+    assert event["advisory"] is False
+
+    # the star the up vote wrote is still the caster's answer
+    assert self_rating(api_client, caster, liked)["rating"] == 5
+
+    # and it invents no star where there was none
+    post_feedback(api_client, caster, unrated, vote="refill")
+    assert self_rating(api_client, caster, unrated) is None
+    assert self_rating(api_client, housemate, unrated) is None
+
+    # the household feed carries it, and the vote filter can pick it out for the planner
+    requests = household_feedback(api_client, housemate, vote="refill")
+    assert {row["recipeId"] for row in requests} == {str(liked.id), str(unrated.id)}
+    assert all(row["username"] == caster.username for row in requests)
+
+    # undoing it leaves the star exactly where the up vote put it
+    response = api_client.delete(
+        api_routes.users_id_feedback_event_id(caster.user_id, event["id"]), headers=caster.token
+    )
+    assert response.status_code == 200, response.text
+    assert self_rating(api_client, caster, liked)["rating"] == 5
+    assert [row["vote"] for row in own_feedback(api_client, caster) if row["recipeId"] == str(liked.id)] == ["up"]
 
 
 def test_vote_preserves_the_caster_rating_favorite_flag(

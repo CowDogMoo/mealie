@@ -40,7 +40,17 @@ from mealie.schema._mealie import MealieModel
 
 from .user import UserRatingOut
 
-FEEDBACK_VOTES: tuple[str, ...] = ("up", "down", "neutral")
+OPINION_VOTES: tuple[str, ...] = ("up", "down", "neutral")
+"""The votes that say what a person thinks of a recipe. The newest of these is their current answer."""
+
+REFILL_VOTE = "refill"
+"""Not an opinion: "find me a new one". The recipe stays exactly as it was -- no star is written,
+nothing is hidden -- and the household's planner, which reads the feedback log, imports one new
+recipe in the same role into the recipe box. It is logged as an event like any vote so it can be
+undone from the same page, and so the planner can tell a request it has already filled from a
+fresh one."""
+
+FEEDBACK_VOTES: tuple[str, ...] = (*OPINION_VOTES, REFILL_VOTE)
 """Every vote the API accepts. ``down`` is the only one that requires a reason."""
 
 FEEDBACK_SCOPES: tuple[str, ...] = ("recipe", "dish", "ingredient", "cuisine", "source")

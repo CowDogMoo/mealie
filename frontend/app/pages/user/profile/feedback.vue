@@ -33,6 +33,12 @@
       >
         {{ $t("feedback.thumbs-up") }}
       </v-chip>
+      <v-chip
+        value="refill"
+        :prepend-icon="$globals.icons.diceMultiple"
+      >
+        {{ $t("feedback.find-new") }}
+      </v-chip>
       <v-chip value="all">
         {{ $t("feedback.all-votes") }}
       </v-chip>
@@ -115,10 +121,10 @@
 import { useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
 import { useUserSelfFeedback } from "~/composables/use-users";
-import { latestFeedbackByRecipe } from "~/composables/use-users/feedback-log";
+import { latestFeedbackByRecipe, latestRefillByRecipe } from "~/composables/use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
-type VoteFilter = "down" | "up" | "all";
+type VoteFilter = "down" | "up" | "refill" | "all";
 
 interface FeedbackRow extends UserFeedbackOut {
   recipeName: string;
@@ -181,9 +187,14 @@ function castAt(event: UserFeedbackOut): number {
   return event.createdAt ? Date.parse(event.createdAt) : 0;
 }
 
-// the current answer per recipe, newest first
+// the current answer per recipe, plus the newest "find me a new one" request per recipe, newest
+// first. A request is listed beside the opinion rather than instead of it: asking for something
+// new like a dish does not change what you said about the dish.
 const latest = computed(() => {
-  const events = [...latestFeedbackByRecipe(userFeedback.value).values()];
+  const events = [
+    ...latestFeedbackByRecipe(userFeedback.value).values(),
+    ...latestRefillByRecipe(userFeedback.value).values(),
+  ];
   return events.sort((a, b) => castAt(b) - castAt(a));
 });
 
@@ -232,6 +243,9 @@ function voteIcon(vote: string) {
   if (vote === "up") {
     return $globals.icons.thumbUp;
   }
+  if (vote === "refill") {
+    return $globals.icons.diceMultiple;
+  }
   return $globals.icons.minus;
 }
 
@@ -242,6 +256,9 @@ function voteColor(vote: string) {
   if (vote === "up") {
     return "success";
   }
+  if (vote === "refill") {
+    return "primary";
+  }
   return undefined;
 }
 
@@ -251,6 +268,9 @@ function voteLabel(vote: string) {
   }
   if (vote === "up") {
     return i18n.t("feedback.thumbs-up");
+  }
+  if (vote === "refill") {
+    return i18n.t("feedback.find-new");
   }
   return i18n.t("feedback.neutral");
 }

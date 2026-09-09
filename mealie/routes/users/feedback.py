@@ -26,7 +26,8 @@ router = UserAPIRouter()
 VOTE_STAR_RATINGS: dict[str, float] = {"down": 1, "up": 5}
 """PLAN.md D3: a vote also writes the caster's star, since nobody who just pressed thumbs-down
 in the planner is then going to go set stars. ``neutral`` is deliberately absent from this map --
-it records an opinion too mild to be worth overwriting a star the person chose deliberately."""
+it records an opinion too mild to be worth overwriting a star the person chose deliberately.
+``refill`` is absent too: it is not an opinion at all, only a request for a new recipe like this one."""
 
 
 @controller(router)
