@@ -254,6 +254,28 @@ describe("user feedback page", () => {
     expect(wrapper.text()).not.toContain(enUS.feedback["no-feedback"]);
   });
 
+  test("a find-me-a-new-one request sits beside the vote on the same recipe, and has its own chip", async () => {
+    userFeedback.value = [
+      event({ id: "curry-up", recipeId: "curry", vote: "up", reason: null, createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "curry-ask", recipeId: "curry", vote: "refill", reason: null, createdAt: "2026-09-02T00:00:00" }),
+      event({ id: "toast-down", recipeId: "toast", vote: "down", createdAt: "2026-09-03T00:00:00" }),
+    ];
+
+    const wrapper = await mountPage();
+
+    await pickFilter(wrapper, enUS.feedback["find-new"]);
+    expect(rowText(wrapper)).toHaveLength(1);
+    expect(rowText(wrapper)[0]).toContain("Green Curry");
+
+    // the request did not replace the up vote: both rows are there under "all"
+    await pickFilter(wrapper, enUS.feedback["all-votes"]);
+    expect(rowText(wrapper)).toHaveLength(3);
+
+    await pickFilter(wrapper, enUS.feedback["thumbs-up"]);
+    expect(rowText(wrapper)).toHaveLength(1);
+    expect(rowText(wrapper)[0]).toContain("Green Curry");
+  });
+
   test("undo deletes exactly that vote and reports success", async () => {
     userFeedback.value = [
       event({ id: "curry-down", recipeId: "curry", createdAt: "2026-09-06T00:00:00" }),

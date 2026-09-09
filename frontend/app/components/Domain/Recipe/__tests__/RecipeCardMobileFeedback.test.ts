@@ -165,12 +165,13 @@ describe("RecipeCardMobile feedback controls", () => {
     openCards.splice(0).forEach(wrapper => wrapper.unmount());
   });
 
-  test("puts both thumbs in the action row when the caller opts in", () => {
+  test("puts both thumbs and the find-me-a-new-one die in the action row when the caller opts in", () => {
     const wrapper = mountCard({ showFeedback: true });
 
     expectCardRendered(wrapper);
     expect(wrapper.findComponent(RecipeFeedbackButtons).exists()).toBe(true);
-    expect(wrapper.findAllComponents(VBtn)).toHaveLength(2);
+    expect(wrapper.findAllComponents(VBtn)).toHaveLength(3);
+    expect(wrapper.find("[data-test=\"find-new\"]").exists()).toBe(true);
     expect(wrapper.find(THUMBS_UP).exists()).toBe(true);
     expect(wrapper.find(THUMBS_DOWN).exists()).toBe(true);
     expect(wrapper.find(THUMBS_DOWN).attributes("disabled")).toBeUndefined();

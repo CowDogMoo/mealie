@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, ref } from "vue";
 import { createVuetify } from "vuetify";
 import {
@@ -20,6 +20,12 @@ import enUS from "~/lang/messages/en-US.json";
 const isOwnGroup = ref(true);
 const selfFeedback = ref<{ recipeId: string; vote: string; createdAt: string }[]>([]);
 
+const { setFeedback, alertSuccess } = vi.hoisted(() => ({ setFeedback: vi.fn(), alertSuccess: vi.fn() }));
+
+vi.mock("~/composables/use-toast", () => ({
+  alert: { success: alertSuccess, error: vi.fn() },
+}));
+
 // the mock factories are hoisted, but they only run when the card is imported below, by which
 // point both refs above exist
 vi.mock("~/composables/use-logged-in-state", () => ({
@@ -30,7 +36,7 @@ vi.mock("~/composables/use-users", () => ({
   useUserSelfFeedback: () => ({
     userFeedback: selfFeedback,
     refreshUserFeedback: vi.fn(),
-    setFeedback: vi.fn(),
+    setFeedback,
     deleteFeedback: vi.fn(),
     ready: ref(true),
   }),
@@ -98,6 +104,7 @@ const RecipeFeedbackButtons = (await import("../RecipeFeedbackButtons.vue")).def
 const feedback = enUS.feedback;
 const THUMBS_UP = `[aria-label="${feedback["thumbs-up"]}"]`;
 const THUMBS_DOWN = `[aria-label="${feedback["thumbs-down"]}"]`;
+const FIND_NEW = "[data-test=\"find-new\"]";
 
 // each thumb owns a tooltip, and Vuetify teleports tooltip content to a container on the body
 // that outlives the test unless the card it belongs to is torn down
@@ -159,6 +166,9 @@ describe("RecipeCard feedback controls", () => {
   beforeEach(() => {
     isOwnGroup.value = true;
     selfFeedback.value = [];
+    setFeedback.mockReset();
+    setFeedback.mockResolvedValue(undefined);
+    alertSuccess.mockReset();
   });
 
   afterEach(() => {
@@ -207,6 +217,22 @@ describe("RecipeCard feedback controls", () => {
 
     expect(wrapper.text()).toContain("Chicken thighs with fennel");
     expect(wrapper.findComponent(RecipeFeedbackButtons).exists()).toBe(false);
+  });
+
+  test("the die asks for a new recipe without touching the thumbs", async () => {
+    selfFeedback.value = [{ recipeId: "recipe-uuid", vote: "up", createdAt: "2026-09-01T00:00:00" }];
+    const wrapper = mountCard({ showFeedback: true });
+
+    expect(wrapper.find(FIND_NEW).attributes("aria-label")).toBe(feedback["find-new"]);
+    await wrapper.find(FIND_NEW).trigger("click");
+    await flushPromises();
+
+    expect(setFeedback).toHaveBeenCalledTimes(1);
+    expect(setFeedback).toHaveBeenCalledWith("chicken-thighs-with-fennel", { vote: "refill" });
+    expect(alertSuccess).toHaveBeenCalledWith(feedback["find-new-requested"]);
+
+    // the up vote is still the answer shown on the thumbs
+    expect(wrapper.find(THUMBS_UP).find(".v-icon").classes()).toContain("text-success");
   });
 
   test("keeps one row: favourite, rating, thumbs, then the menu", () => {

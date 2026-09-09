@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { downvotedRecipeIds, latestFeedbackByRecipe } from "../use-users/feedback-log";
+import { downvotedRecipeIds, latestFeedbackByRecipe, latestRefillByRecipe } from "../use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
 function event(overrides: Partial<UserFeedbackOut>): UserFeedbackOut {
@@ -60,6 +60,39 @@ describe("latestFeedbackByRecipe", () => {
     ]);
 
     expect(latest.get("recipe")?.id).toBe("dated");
+  });
+});
+
+describe("refill requests", () => {
+  test("a find-me-a-new-one request is not an answer, so it never displaces the vote before it", () => {
+    const latest = latestFeedbackByRecipe([
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "ask", recipeId: "a", vote: "refill", createdAt: "2026-09-02T00:00:00" }),
+      event({ id: "only-ask", recipeId: "b", vote: "refill" }),
+    ]);
+
+    expect(latest.get("a")?.id).toBe("up");
+    expect(latest.has("b")).toBe(false);
+  });
+
+  test("a request after a down vote does not unhide the recipe", () => {
+    const hidden = downvotedRecipeIds([
+      event({ id: "down", recipeId: "a", vote: "down", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "ask", recipeId: "a", vote: "refill", createdAt: "2026-09-02T00:00:00" }),
+    ]);
+
+    expect(hidden.has("a")).toBe(true);
+  });
+
+  test("the newest request per recipe is kept apart from the opinions", () => {
+    const requests = latestRefillByRecipe([
+      event({ id: "up", recipeId: "a", vote: "up" }),
+      event({ id: "old-ask", recipeId: "a", vote: "refill", createdAt: "2026-09-02T00:00:00" }),
+      event({ id: "new-ask", recipeId: "a", vote: "refill", createdAt: "2026-09-03T00:00:00" }),
+    ]);
+
+    expect(requests.get("a")?.id).toBe("new-ask");
+    expect(requests.size).toBe(1);
   });
 });
 
