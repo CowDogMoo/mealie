@@ -13,6 +13,7 @@ from .._model_utils.guid import GUID
 from ..household.cookbook import CookBook
 from ..household.invite_tokens import GroupInviteToken
 from ..household.mealplan import GroupMealPlan
+from ..household.recipe_source import HouseholdRecipeSourceModel
 from ..household.webhooks import GroupWebhooksModel
 from ..recipe.category import Category, group_to_categories
 from ..server.task import ServerTaskModel
@@ -75,6 +76,9 @@ class Group(SqlAlchemyBase, BaseMixins):
         GroupMealPlan, order_by="GroupMealPlan.date", **common_args
     )
     webhooks: Mapped[list[GroupWebhooksModel]] = orm.relationship(GroupWebhooksModel, **common_args)
+    recipe_sources: Mapped[list[HouseholdRecipeSourceModel]] = orm.relationship(
+        HouseholdRecipeSourceModel, **common_args
+    )
     recipe_actions: Mapped[list["GroupRecipeAction"]] = orm.relationship("GroupRecipeAction", **common_args)
     cookbooks: Mapped[list[CookBook]] = orm.relationship(CookBook, **common_args)
     server_tasks: Mapped[list["ServerTaskModel"]] = orm.relationship("ServerTaskModel", **common_args)
@@ -95,6 +99,7 @@ class Group(SqlAlchemyBase, BaseMixins):
             "households",
             "users",
             "webhooks",
+            "recipe_sources",
             "recipe_actions",
             "shopping_lists",
             "cookbooks",

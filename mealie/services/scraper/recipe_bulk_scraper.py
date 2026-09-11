@@ -15,6 +15,7 @@ from mealie.schema.reports.reports import (
 from mealie.schema.user.user import GroupInDB
 from mealie.services._base_service import BaseService
 from mealie.services.recipe.recipe_service import RecipeService
+from mealie.services.recipe_sources.service import RecipeSourceBlockedError, RecipeSourceService
 from mealie.services.scraper.scraper import create_from_html
 
 
@@ -85,8 +86,16 @@ class RecipeBulkScraperService(BaseService):
         async def _do(url: str) -> Recipe | None:
             async with sem:
                 try:
+                    # the same gate the single-URL importer applies: a site the household has
+                    # blocked is refused before anything is fetched, and the report says so
+                    RecipeSourceService(self.repos).assert_not_blocked(url)
                     recipe, _ = await create_from_html(url, self.repos, self.translator)
                     return recipe
+                except RecipeSourceBlockedError as e:
+                    self._add_error_entry(
+                        f"refused to import {url}: {e.domain} is blocked on the household recipe source list", str(e)
+                    )
+                    return None
                 except Exception as e:
                     self.service.logger.error(f"failed to scrape url during bulk url import {url}")
                     self.service.logger.exception(e)

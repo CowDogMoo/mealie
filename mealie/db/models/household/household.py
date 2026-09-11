@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         GroupRecipeAction,
         GroupWebhooksModel,
         HouseholdPreferencesModel,
+        HouseholdRecipeSourceModel,
     )
 
 
@@ -62,6 +63,9 @@ class Household(SqlAlchemyBase, BaseMixins):
     cookbooks: Mapped[list["CookBook"]] = orm.relationship("CookBook", **COMMON_ARGS)
 
     webhooks: Mapped[list["GroupWebhooksModel"]] = orm.relationship("GroupWebhooksModel", **COMMON_ARGS)
+    recipe_sources: Mapped[list["HouseholdRecipeSourceModel"]] = orm.relationship(
+        "HouseholdRecipeSourceModel", **COMMON_ARGS
+    )
     group_event_notifiers: Mapped[list["GroupEventNotifierModel"]] = orm.relationship(
         "GroupEventNotifierModel", **COMMON_ARGS
     )
@@ -82,6 +86,7 @@ class Household(SqlAlchemyBase, BaseMixins):
         exclude={
             "users",
             "webhooks",
+            "recipe_sources",
             "recipe_actions",
             "cookbooks",
             "preferences",

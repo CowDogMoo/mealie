@@ -1145,6 +1145,8 @@
     "manage-cookbooks": "Manage Cookbooks",
     "manage-members": "Manage Members",
     "manage-webhooks": "Manage Webhooks",
+    "manage-recipe-sources": "Manage Recipe Sources",
+    "recipe-sources-description": "Decide which recipe sites your household trusts, which to treat with caution, and which to refuse imports from.",
     "manage-notifiers": "Manage Notifiers",
     "manage-data-migrations": "Manage Data Migrations"
   },
@@ -1202,6 +1204,27 @@
     "mark-all-as-read": "Mark All as Read",
     "show-announcements-from-mealie": "Show announcements from Mealie",
     "show-announcements-setting-description": "Whether or not you want to allow users to see announcements from Mealie. When enabled users can still opt-out from seeing them in their user settings"
+  },
+  "recipe-sources": {
+    "title": "Recipe Sources",
+    "description": "Your household's judgement about recipe sites. Known-good sites import silently, caution sites import with a warning, and blocked sites cannot be imported by URL. A thumbs-down with the reason \"bad source\" moves that site to caution automatically.",
+    "manage": "Manage recipe sources",
+    "domain": "Site",
+    "domain-hint": "A domain or a recipe URL; only the site is kept, e.g. budgetbytes.com",
+    "status": "Status",
+    "note": "Note",
+    "status-known-good": "Known good",
+    "status-caution": "Caution",
+    "status-blocked": "Blocked",
+    "status-unlisted": "Not on your list",
+    "lookup-caution": "{domain} is marked caution on your household's recipe source list.",
+    "lookup-blocked": "{domain} is blocked on your household's recipe source list. Change its status to import from it.",
+    "lookup-unlisted": "{domain} is not on your household's recipe source list yet.",
+    "empty": "No sites listed yet. Add the sites your household trusts, or let a bad-source vote add one for you.",
+    "added": "{domain} added",
+    "removed": "{domain} removed",
+    "add-failed": "{domain} could not be added. It may already be on the list.",
+    "save-failed": "{domain} could not be saved. Another entry may already use that site."
   },
   "feedback": {
     "title": "Not for me",

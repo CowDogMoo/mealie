@@ -9,6 +9,7 @@ from . import (
     controller_invitations,
     controller_mealplan,
     controller_mealplan_rules,
+    controller_recipe_sources,
     controller_shopping_lists,
     controller_webhooks,
 )
@@ -21,6 +22,7 @@ router.include_router(controller_group_recipe_actions.router)
 router.include_router(controller_household_feedback.router)
 router.include_router(controller_household_self_service.router)
 router.include_router(controller_invitations.router)
+router.include_router(controller_recipe_sources.router)
 router.include_router(controller_shopping_lists.router)
 router.include_router(controller_shopping_lists.item_router)
 router.include_router(controller_webhooks.router)

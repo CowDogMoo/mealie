@@ -20,6 +20,11 @@
         },
         "and-amount": "and {amount}",
         "or-ingredient": "or {ingredient}",
+        "import-warnings": {
+            "source-caution": "{domain} is marked caution on your household's recipe source list",
+            "source-caution-with-note": "{domain} is marked caution on your household's recipe source list: {note}",
+            "source-unlisted": "{domain} is not on your household's recipe source list"
+        },
         "import-errors": {
             "ai-not-enabled": "AI services are not enabled",
             "ai-request-failed": "The AI provider was unable to complete the request. Please try again",
@@ -28,6 +33,8 @@
             "no-source": "No content, images, or URL were provided",
             "provider-returned-nothing": "The AI provider did not return a recipe",
             "unknown-error": "Something went wrong while creating the recipe. Please try again",
+            "source-blocked": "Imports from {domain} are blocked by your household's recipe source list",
+            "source-blocked-with-note": "Imports from {domain} are blocked by your household's recipe source list: {note}",
             "unreadable-source": "Unable to read any content from the provided source",
             "video-download-failed": "Unable to download the video. It may be private, removed, or from an unsupported site"
         },

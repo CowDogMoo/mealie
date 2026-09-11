@@ -33,6 +33,7 @@ from mealie.repos.all_repositories import get_repositories
 from mealie.routes._base import controller
 from mealie.routes._base.routers import MealieCrudRoute, UserAPIRouter
 from mealie.schema.cookbook.cookbook import ReadCookBook
+from mealie.schema.household.recipe_source import RecipeSourceStatus
 from mealie.schema.make_dependable import make_dependable
 from mealie.schema.recipe import Recipe, ScrapeRecipe, ScrapeRecipeData
 from mealie.schema.recipe.recipe import (
@@ -73,6 +74,7 @@ from mealie.services.recipe.recipe_data_service import (
     NotAnImageError,
     RecipeDataService,
 )
+from mealie.services.recipe_sources.service import RecipeSourceBlockedError, RecipeSourceService
 from mealie.services.scraper.recipe_bulk_scraper import RecipeBulkScraperService
 from mealie.services.scraper.scraped_extras import ScraperContext
 from mealie.services.scraper.scraper import create_from_html
@@ -236,6 +238,11 @@ class RecipeController(BaseRecipeController):
         if isinstance(ex, exceptions.OpenAIServiceError):
             return self.t("recipe.import-errors.ai-request-failed")
 
+        if isinstance(ex, RecipeSourceBlockedError):
+            if ex.source.note:
+                return self.t("recipe.import-errors.source-blocked-with-note", domain=ex.domain, note=ex.source.note)
+            return self.t("recipe.import-errors.source-blocked", domain=ex.domain)
+
         if isinstance(ex, HTTPException):
             # scraper failures carry a `ParserErrors` value (e.g. BAD_RECIPE_DATA), which the URL
             # and HTML importers expect verbatim. They render their own message rather than this one
@@ -308,6 +315,9 @@ class RecipeController(BaseRecipeController):
             url = req.url
 
         async def create(on_progress: Callable[[str], Awaitable[None]]) -> str:
+            if warning := self._check_recipe_source(url):
+                await on_progress(warning)
+
             recipe, extras = await create_from_html(
                 url,
                 self.repos,
@@ -320,6 +330,34 @@ class RecipeController(BaseRecipeController):
             return self._finish_recipe_from_web(req, recipe, extras)
 
         return self._stream_recipe_creation(create)
+
+    def _check_recipe_source(self, url: str) -> str | None:
+        """Consult the household's recipe source list before anything is fetched.
+
+        A blocked site raises `RecipeSourceBlockedError`, which `_error_message` turns into the
+        refusal the importer shows. A site on caution, or one the list has never heard of, gets a
+        progress message instead: the import goes ahead, but the person watching it is told what
+        the household thinks of where it came from. A known-good site says nothing at all.
+        """
+
+        if not url:
+            return None
+
+        found = RecipeSourceService(self.repos).assert_not_blocked(url)
+        if found is None:
+            return None
+
+        if found.source is None:
+            return self.t("recipe.import-warnings.source-unlisted", domain=found.domain)
+
+        if found.status == RecipeSourceStatus.caution:
+            if found.source.note:
+                return self.t(
+                    "recipe.import-warnings.source-caution-with-note", domain=found.domain, note=found.source.note
+                )
+            return self.t("recipe.import-warnings.source-caution", domain=found.domain)
+
+        return None
 
     def _finish_recipe_from_web(self, req: ScrapeRecipe | ScrapeRecipeData, recipe: Recipe, extras: object) -> str:
         if req.include_tags:
