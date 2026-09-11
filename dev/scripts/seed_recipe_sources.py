@@ -1,9 +1,11 @@
-"""Load a curated recipe-site list into a household's Mealie recipe source list.
+"""Load a tiered recipe-site list from markdown into a household's Mealie recipe source list.
 
-Reads the markdown the weekday-dinner-recipes skill keeps in `references/sources.md` -- three
-tiers of tables, each row starting with a site name and a URL pattern -- and posts one entry per
-site through `/api/households/recipe-sources`, so the household's list starts from the judgement
-the skill already encoded rather than from nothing.
+The household's list in Mealie is the source of truth; this script exists to fill a fresh
+household from a markdown file of the shape the weekday-dinner-recipes skill used to ship: three
+tables under "Tier 1", "Tier 2" and "Do NOT use" headings, each row starting with a site name and
+a URL pattern (or, for the lower tiers, a site name that `HOSTS_BY_NAME` knows). One entry per
+site is posted through `/api/households/recipe-sources`. To copy a list between instances, take
+the JSON from `GET /api/households/recipe-sources` instead.
 
 Tier headings map to statuses:
 
@@ -167,7 +169,7 @@ class MealieClient:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("sources", type=Path, help="path to the skill's references/sources.md")
+    parser.add_argument("sources", type=Path, help="path to a tiered markdown list (Tier 1 / Tier 2 / Do NOT use)")
     parser.add_argument("--dry-run", action="store_true", help="parse and report; touch nothing")
     parser.add_argument("--url", default=os.environ.get("MEALIE_URL"), help="Mealie base URL (or MEALIE_URL)")
     parser.add_argument("--token", default=os.environ.get("MEALIE_TOKEN"), help="API token (or MEALIE_TOKEN)")
