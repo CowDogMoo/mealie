@@ -103,9 +103,10 @@ def test_blocked_domain_refuses_url_import_before_scraping(
         headers=unique_user.token,
     )
     assert response.status_code == 400, response.text
-    message = response.json()["detail"]["message"]
-    assert "allrecipes.com" in message
-    assert "blocked from search here" in message
+    # the whole sentence, not a substring: the message is what the importer shows the person
+    assert response.json()["detail"]["message"] == (
+        "Imports from allrecipes.com are blocked by your household's recipe source list: blocked from search here"
+    )
 
     assert stub_scraper == [], "the scraper must not run for a blocked site"
 
@@ -117,7 +118,9 @@ def test_blocked_domain_refuses_streamed_import(
 
     events = stream_import(api_client, unique_user, "https://foodnetwork.com/recipes/x")
     assert [e["event"] for e in events] == ["error"]
-    assert "foodnetwork.com" in events[0]["data"]["message"]
+    assert events[0]["data"]["message"] == (
+        "Imports from foodnetwork.com are blocked by your household's recipe source list"
+    )
     assert stub_scraper == []
 
 
@@ -130,9 +133,9 @@ def test_caution_domain_warns_then_imports(
     events = stream_import(api_client, unique_user, url)
     try:
         warnings = source_messages(events)
-        assert len(warnings) == 1
-        assert "seriouseats.com" in warnings[0]
-        assert "ratings inconsistent" in warnings[0]
+        assert warnings == [
+            "seriouseats.com is marked caution on your household's recipe source list: ratings inconsistent"
+        ]
 
         # the warning is the first thing said, before the scraper does anything
         progress = [e for e in events if e["event"] == "progress"]
@@ -152,8 +155,7 @@ def test_unlisted_domain_warns_then_imports(
     events = stream_import(api_client, unique_user, url)
     try:
         warnings = source_messages(events)
-        assert len(warnings) == 1
-        assert "not on" in warnings[0]
+        assert warnings == [f"{url.split('/')[2]} is not on your household's recipe source list"]
         assert events[-1]["event"] == "done"
         assert stub_scraper == [url]
     finally:
@@ -394,8 +396,9 @@ def test_bulk_import_refuses_blocked_url_and_imports_the_rest(
         failures = [e for e in report["entries"] if not e["success"]]
         successes = [e for e in report["entries"] if e["success"]]
         assert len(failures) == 1 and len(successes) == 1
-        assert "blocked-bulk.example" in failures[0]["message"]
-        assert "blocked" in failures[0]["message"]
+        assert failures[0]["message"] == (
+            f"refused to import {blocked_url}: blocked-bulk.example is blocked on the household recipe source list"
+        )
     finally:
         for recipe in api_client.get(api_routes.recipes, params={"perPage": -1}, headers=unique_user.token).json()[
             "items"

@@ -121,7 +121,7 @@ def test_create_rejects_duplicate_domain_in_any_spelling(
         headers=unique_user.token,
     )
     assert response.status_code == 409, response.text
-    assert "onceuponachef.com" in response.json()["detail"]["message"]
+    assert response.json()["detail"]["message"] == "onceuponachef.com is already on this household's recipe source list"
 
     # the rejected write changed nothing
     sources = [s for s in list_sources(api_client, unique_user) if s["domain"] == "onceuponachef.com"]
