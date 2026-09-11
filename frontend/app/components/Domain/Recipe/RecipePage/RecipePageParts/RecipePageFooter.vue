@@ -8,8 +8,13 @@
         variant="underlined"
         :label="$t('recipe.original-url')"
       />
+      <RecipeSourceStatusChip
+        v-if="!isEditForm && recipe.orgURL && !isCookMode"
+        :url="recipe.orgURL"
+        class="mr-2"
+      />
       <v-btn
-        v-else-if="recipe.orgURL && !isCookMode"
+        v-if="!isEditForm && recipe.orgURL && !isCookMode"
         :hover="false"
         :ripple="false"
         variant="flat"
@@ -83,6 +88,7 @@
 
 <script setup lang="ts">
 import { usePageState } from "~/composables/recipe-page/shared-state";
+import RecipeSourceStatusChip from "~/components/Domain/Recipe/RecipeSourceStatusChip.vue";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe } from "~/lib/api/types/recipe";
 

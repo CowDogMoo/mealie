@@ -43,6 +43,25 @@
             :hint="$t('new-recipe.url-form-hint')"
             persistent-hint
           />
+          <v-expand-transition>
+            <v-alert
+              v-if="sourceMessageKey"
+              :type="sourceFound?.status === 'blocked' ? 'error' : 'warning'"
+              variant="tonal"
+              density="compact"
+              class="mt-3"
+              data-testid="recipe-source-import-warning"
+            >
+              {{ $t(sourceMessageKey, { domain: sourceDomain }) }}
+              <span v-if="sourceFound?.source?.note"> {{ sourceFound.source.note }}</span>
+              <router-link
+                :to="'/household/recipe-sources'"
+                class="ml-1"
+              >
+                {{ $t('recipe-sources.manage') }}
+              </router-link>
+            </v-alert>
+          </v-expand-transition>
         </v-card-text>
         <v-checkbox
           v-model="importKeywordsAsTags"
@@ -157,6 +176,7 @@ import { useGroupSelf } from "~/composables/use-groups";
 import { useTagStore } from "~/composables/store/use-tag-store";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
 import { validators } from "~/composables/use-validators";
+import { lookupMessageKey, useRecipeSourceLookup } from "~/composables/use-recipe-sources";
 import type { VForm } from "~/types/auto-forms";
 
 definePageMeta({
@@ -231,6 +251,9 @@ const recipeUrl = computed({
     return null;
   },
 });
+
+const { found: sourceFound, domain: sourceDomain } = useRecipeSourceLookup(recipeUrl);
+const sourceMessageKey = computed(() => lookupMessageKey(sourceFound.value));
 
 onMounted(() => {
   if (recipeUrl.value) {

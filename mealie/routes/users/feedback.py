@@ -17,9 +17,11 @@ from mealie.repos.all_repositories import get_repositories
 from mealie.routes._base import BaseUserController, controller
 from mealie.routes._base.routers import UserAPIRouter
 from mealie.routes.users._helpers import assert_user_change_allowed
+from mealie.schema.recipe.recipe import Recipe
 from mealie.schema.response.responses import ErrorResponse
 from mealie.schema.user.user import UserRatingCreate
 from mealie.schema.user.user_feedback import UserFeedbackCreate, UserFeedbackIn, UserFeedbackOut, UserFeedbacks
+from mealie.services.recipe_sources.service import RecipeSourceService
 
 router = UserAPIRouter()
 
@@ -110,8 +112,37 @@ class UserFeedbackController(BaseUserController):
 
         # after the event, which is the record; the star is a projection of it (D3)
         self.sync_star_rating(id, recipe.id, event.vote)
+        self.demote_source(event, recipe)
 
         return event
+
+    def demote_source(self, event: UserFeedbackOut, recipe: Recipe) -> None:
+        """Project a licensed `bad-source` vote onto the household's recipe source list.
+
+        Only a `down` vote whose reason licenses the `source` scope moves the list; an advisory
+        claim (a wider scope than the reason allows) is recorded as an opinion and nothing more.
+        The site is taken from the recipe's own original URL first, because that is the source the
+        vote was actually cast against; the typed target is a fallback for a recipe with no URL,
+        and only when it looks like a host rather than a name.
+
+        The vote is already committed when this runs, and it is the record. A failure here is
+        logged and swallowed so it cannot turn a recorded vote into a 500.
+        """
+
+        if event.vote != "down" or event.scope != "source" or event.advisory:
+            return
+
+        candidates = [recipe.org_url, event.target if event.target and "." in event.target else None]
+        site = next((candidate for candidate in candidates if candidate), None)
+        if site is None:
+            return
+
+        who = self.user.username or str(self.user.id)
+        note = f"bad-source vote by {who} on {recipe.name}"
+        try:
+            RecipeSourceService(self.repos).demote(site, note)
+        except Exception:
+            self.logger.exception("failed to demote recipe source %s after a bad-source vote", site)
 
     @router.get("/{id}/feedback", response_model=UserFeedbacks[UserFeedbackOut])
     def get_feedback(self, id: UUID4) -> UserFeedbacks[UserFeedbackOut]:

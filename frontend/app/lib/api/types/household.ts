@@ -7,6 +7,7 @@
 
 export type GroupRecipeActionType = "link" | "post";
 export type WebhookType = "mealplan";
+export type RecipeSourceStatus = "known-good" | "caution" | "blocked";
 
 export interface CreateGroupRecipeAction {
   actionType: GroupRecipeActionType;
@@ -266,6 +267,31 @@ export interface HouseholdSummary {
 export interface ReadInviteToken {
   token: string;
   usesLeft: number;
+  groupId: string;
+  householdId: string;
+}
+export interface RecipeSourceCreate {
+  domain: string;
+  status?: RecipeSourceStatus;
+  note?: string | null;
+}
+export interface RecipeSourceLookupOut {
+  domain: string;
+  status?: string | null;
+  source?: RecipeSourceOut | null;
+}
+export interface RecipeSourceOut {
+  domain: string;
+  status?: RecipeSourceStatus;
+  note?: string | null;
+  groupId: string;
+  householdId: string;
+  id: string;
+}
+export interface RecipeSourceSave {
+  domain: string;
+  status?: RecipeSourceStatus;
+  note?: string | null;
   groupId: string;
   householdId: string;
 }

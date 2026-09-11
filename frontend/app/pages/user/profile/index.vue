@@ -207,6 +207,21 @@
             </UserProfileLinkCard>
           </v-col>
         </AdvancedOnly>
+        <v-col
+          cols="12"
+          sm="12"
+          md="6"
+        >
+          <UserProfileLinkCard
+            :link="{ text: $t('profile.manage-recipe-sources'), to: `/household/recipe-sources` }"
+            image="/svgs/manage-recipes.svg"
+          >
+            <template #title>
+              {{ $t('recipe-sources.title') }}
+            </template>
+            {{ $t('profile.recipe-sources-description') }}
+          </UserProfileLinkCard>
+        </v-col>
         <AdvancedOnly>
           <v-col
             cols="12"
