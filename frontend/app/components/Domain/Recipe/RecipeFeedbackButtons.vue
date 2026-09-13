@@ -8,6 +8,7 @@
       :size="small ? 'x-small' : 'small'"
       :disabled="saving"
       :aria-label="$t('feedback.thumbs-up')"
+      :aria-pressed="isUp"
       icon
       variant="text"
       @click="voteUp"
@@ -22,7 +23,7 @@
         activator="parent"
         location="bottom"
       >
-        {{ $t("feedback.thumbs-up") }}
+        {{ isUp ? $t("feedback.undo-vote") : $t("feedback.thumbs-up") }}
       </v-tooltip>
     </v-btn>
 
@@ -30,9 +31,10 @@
       :size="small ? 'x-small' : 'small'"
       :disabled="saving"
       :aria-label="$t('feedback.thumbs-down')"
+      :aria-pressed="isDown"
       icon
       variant="text"
-      @click="dialog = true"
+      @click="voteDown"
     >
       <v-icon
         :size="small ? 'small' : undefined"
@@ -44,7 +46,7 @@
         activator="parent"
         location="bottom"
       >
-        {{ $t("feedback.thumbs-down") }}
+        {{ isDown ? $t("feedback.undo-vote") : $t("feedback.thumbs-down") }}
       </v-tooltip>
     </v-btn>
 
@@ -101,7 +103,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const { isOwnGroup } = useLoggedInState();
-const { userFeedback, setFeedback } = useUserSelfFeedback();
+const { userFeedback, setFeedback, deleteFeedback } = useUserSelfFeedback();
 
 const dialog = ref(false);
 const saving = ref(false);
@@ -142,9 +144,36 @@ async function requestRefill() {
   }
 }
 
+// Pressing the thumb that is already lit takes the vote back, the way a lit thumb does
+// everywhere else. It undoes the one event the thumb is showing rather than wiping the recipe's
+// history, so an older vote underneath it becomes the answer again -- which is what the server
+// does to the star it wrote (see `unsync_star_rating`). The die is not a toggle: pressing it
+// again means "another one", so it keeps its own behaviour above.
+async function undoVote() {
+  const event = latest.value;
+  if (!event || saving.value) {
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const result = await deleteFeedback(event.id);
+    if (result?.response?.status !== 200) {
+      alert.error(i18n.t("feedback.undo-failed"));
+    }
+  }
+  finally {
+    saving.value = false;
+  }
+}
+
 async function voteUp() {
-  // an up vote carries no reason, so casting it again would only add a duplicate to the log
-  if (isUp.value || saving.value) {
+  if (isUp.value) {
+    await undoVote();
+    return;
+  }
+
+  if (saving.value) {
     return;
   }
 
@@ -155,6 +184,17 @@ async function voteUp() {
   finally {
     saving.value = false;
   }
+}
+
+// A down vote has to say why, so casting one opens the dialog; taking one back needs nothing
+// said, so the lit thumb undoes it on the spot.
+async function voteDown() {
+  if (isDown.value) {
+    await undoVote();
+    return;
+  }
+
+  dialog.value = true;
 }
 </script>
 

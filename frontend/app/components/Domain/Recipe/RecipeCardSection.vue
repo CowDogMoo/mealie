@@ -250,7 +250,8 @@ const displayTitleIcon = computed(() => {
 // "Not for me" and "Find me a new one" both take a recipe out of this person's grids. The recipe
 // itself stays in the household collection, so the filter is applied here on the client, per
 // viewer, rather than in the query the whole household shares. The chip in the toolbar brings the
-// hidden ones back for a look; undoing the vote or the request lives on the feedback page.
+// hidden ones back for a look, and a vote can be taken back from the lit thumb on the card once
+// it is back on screen; the feedback page lists every event, including refill requests.
 const { userFeedback } = useUserSelfFeedback();
 const showHidden = ref(false);
 const hiddenIds = computed(() => (isOwnGroup.value ? hiddenRecipeIds(userFeedback.value) : new Set<string>()));
