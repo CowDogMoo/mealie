@@ -145,6 +145,15 @@
       :description="$t('shopping-list.you-are-offline-description')"
     />
 
+    <!-- Ask for this list to be put in the grocery cart. Above the items, because it is a statement
+         about the whole list, and because whoever presses it should see what it covers first. -->
+    <ShoppingListCartButton
+      class="my-2"
+      :model-value="shoppingList"
+      :disabled="isOffline"
+      @changed="refresh"
+    />
+
     <!-- Viewer -->
     <section v-if="!edit" class="py-2 d-flex flex-column ga-4">
       <!-- Create Item -->
@@ -348,6 +357,7 @@ import { VueDraggable } from "vue-draggable-plus";
 import RecipeList from "~/components/Domain/Recipe/RecipeList.vue";
 import MultiPurposeLabelSection from "~/components/Domain/ShoppingList/MultiPurposeLabelSection.vue";
 import ShoppingListAddItemForm from "~/components/Domain/ShoppingList/ShoppingListAddItemForm.vue";
+import ShoppingListCartButton from "~/components/Domain/ShoppingList/ShoppingListCartButton.vue";
 import ShoppingListItem from "~/components/Domain/ShoppingList/ShoppingListItem.vue";
 import ShoppingListItemEditor from "~/components/Domain/ShoppingList/ShoppingListItemEditor.vue";
 import { useShoppingListPage } from "~/composables/shopping-list-page/use-shopping-list-page";
@@ -407,6 +417,7 @@ const {
   copyListItems,
   toggleReorderLabelsDialog,
   isOffline,
+  refresh,
   createEditorOpen,
   createListItemData,
   createListItem,

@@ -1,6 +1,7 @@
 import { BaseCRUDAPI } from "../base/base-clients";
 import type { ApiRequestInstance } from "~/lib/api/types/non-generated";
 import type {
+  CartRequestOut,
   ShoppingListAddRecipeParamsBulk,
   ShoppingListCreate,
   ShoppingListItemCreate,
@@ -19,6 +20,7 @@ const routes = {
   shoppingListIdAddRecipe: (id: string) => `${prefix}/households/shopping/lists/${id}/recipe`,
   shoppingListIdRemoveRecipe: (id: string, recipeId: string) => `${prefix}/households/shopping/lists/${id}/recipe/${recipeId}/delete`,
   shoppingListIdUpdateLabelSettings: (id: string) => `${prefix}/households/shopping/lists/${id}/label-settings`,
+  shoppingListIdCartRequest: (id: string) => `${prefix}/households/shopping/lists/${id}/cart-request`,
 
   shoppingListItems: `${prefix}/households/shopping/items`,
   shoppingListItemsCreateBulk: `${prefix}/households/shopping/items/create-bulk`,
@@ -39,6 +41,16 @@ export class ShoppingListsApi extends BaseCRUDAPI<ShoppingListCreate, ShoppingLi
 
   async updateLabelSettings(itemId: string, listSettings: ShoppingListMultiPurposeLabelUpdate[]) {
     return await this.requests.put(routes.shoppingListIdUpdateLabelSettings(itemId), listSettings);
+  }
+
+  /** Ask for this list to be put in the household's grocery cart. Never orders anything. */
+  async requestCart(itemId: string) {
+    return await this.requests.post<CartRequestOut>(routes.shoppingListIdCartRequest(itemId), {});
+  }
+
+  /** Cancel a request that is still waiting, or clear one that has finished. */
+  async clearCartRequest(itemId: string) {
+    return await this.requests.delete(routes.shoppingListIdCartRequest(itemId));
   }
 }
 
