@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { downvotedRecipeIds, latestFeedbackByRecipe, latestRefillByRecipe } from "../use-users/feedback-log";
+import { hiddenRecipeIds, latestFeedbackByRecipe, latestRefillByRecipe } from "../use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
 function event(overrides: Partial<UserFeedbackOut>): UserFeedbackOut {
@@ -75,8 +75,8 @@ describe("refill requests", () => {
     expect(latest.has("b")).toBe(false);
   });
 
-  test("a request after a down vote does not unhide the recipe", () => {
-    const hidden = downvotedRecipeIds([
+  test("a request after a down vote keeps the recipe hidden", () => {
+    const hidden = hiddenRecipeIds([
       event({ id: "down", recipeId: "a", vote: "down", createdAt: "2026-09-01T00:00:00" }),
       event({ id: "ask", recipeId: "a", vote: "refill", createdAt: "2026-09-02T00:00:00" }),
     ]);
@@ -96,9 +96,9 @@ describe("refill requests", () => {
   });
 });
 
-describe("downvotedRecipeIds", () => {
+describe("hiddenRecipeIds", () => {
   test("collects the recipes whose current answer is down", () => {
-    const hidden = downvotedRecipeIds([
+    const hidden = hiddenRecipeIds([
       event({ id: "a-down", recipeId: "a", vote: "down" }),
       event({ id: "b-up", recipeId: "b", vote: "up" }),
       event({ id: "c-neutral", recipeId: "c", vote: "neutral" }),
@@ -108,7 +108,7 @@ describe("downvotedRecipeIds", () => {
   });
 
   test("a later up vote lifts an earlier down vote", () => {
-    const hidden = downvotedRecipeIds([
+    const hidden = hiddenRecipeIds([
       event({ id: "down", recipeId: "a", vote: "down", createdAt: "2026-09-01T00:00:00" }),
       event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-02T00:00:00" }),
     ]);
@@ -117,7 +117,7 @@ describe("downvotedRecipeIds", () => {
   });
 
   test("a later down vote hides a recipe that was once liked", () => {
-    const hidden = downvotedRecipeIds([
+    const hidden = hiddenRecipeIds([
       event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
       event({ id: "down", recipeId: "a", vote: "down", createdAt: "2026-09-02T00:00:00" }),
     ]);
@@ -126,6 +126,42 @@ describe("downvotedRecipeIds", () => {
   });
 
   test("an empty log hides nothing", () => {
-    expect(downvotedRecipeIds([]).size).toBe(0);
+    expect(hiddenRecipeIds([]).size).toBe(0);
+  });
+
+  test("a find-me-a-new-one request hides the recipe it was pressed on", () => {
+    const hidden = hiddenRecipeIds([
+      event({ id: "ask", recipeId: "a", vote: "refill" }),
+      event({ id: "b-up", recipeId: "b", vote: "up" }),
+    ]);
+
+    expect([...hidden]).toEqual(["a"]);
+  });
+
+  test("a request after an up vote hides the recipe without changing the answer", () => {
+    const log = [
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "ask", recipeId: "a", vote: "refill", createdAt: "2026-09-02T00:00:00" }),
+    ];
+
+    expect(hiddenRecipeIds(log).has("a")).toBe(true);
+    expect(latestFeedbackByRecipe(log).get("a")?.id).toBe("up");
+  });
+
+  test("a later up vote lifts a request, so the recipe comes back", () => {
+    const hidden = hiddenRecipeIds([
+      event({ id: "ask", recipeId: "a", vote: "refill", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-02T00:00:00" }),
+    ]);
+
+    expect(hidden.size).toBe(0);
+  });
+
+  test("undoing the request (it vanishes from the log) unhides a recipe the person still likes", () => {
+    const hidden = hiddenRecipeIds([
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+    ]);
+
+    expect(hidden.size).toBe(0);
   });
 });

@@ -192,7 +192,7 @@ import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
 import { useUserSelfFeedback } from "~/composables/use-users";
-import { downvotedRecipeIds } from "~/composables/use-users/feedback-log";
+import { hiddenRecipeIds } from "~/composables/use-users/feedback-log";
 import type { Recipe } from "~/lib/api/types/recipe";
 import { useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
@@ -247,13 +247,13 @@ const displayTitleIcon = computed(() => {
   return props.icon || $globals.icons.tags;
 });
 
-// "Not for me" takes a recipe out of this person's grids. The recipe itself stays in the
-// household collection, so the filter is applied here on the client, per viewer, rather than in
-// the query the whole household shares. The chip in the toolbar brings the hidden ones back for
-// a look; undoing the vote lives on the feedback page.
+// "Not for me" and "Find me a new one" both take a recipe out of this person's grids. The recipe
+// itself stays in the household collection, so the filter is applied here on the client, per
+// viewer, rather than in the query the whole household shares. The chip in the toolbar brings the
+// hidden ones back for a look; undoing the vote or the request lives on the feedback page.
 const { userFeedback } = useUserSelfFeedback();
 const showHidden = ref(false);
-const hiddenIds = computed(() => (isOwnGroup.value ? downvotedRecipeIds(userFeedback.value) : new Set<string>()));
+const hiddenIds = computed(() => (isOwnGroup.value ? hiddenRecipeIds(userFeedback.value) : new Set<string>()));
 const hiddenCount = computed(() => props.recipes.filter(recipe => recipe.id && hiddenIds.value.has(recipe.id)).length);
 const visibleRecipes = computed(() =>
   showHidden.value ? props.recipes : props.recipes.filter(recipe => !recipe.id || !hiddenIds.value.has(recipe.id)),

@@ -44,9 +44,10 @@ OPINION_VOTES: tuple[str, ...] = ("up", "down", "neutral")
 """The votes that say what a person thinks of a recipe. The newest of these is their current answer."""
 
 REFILL_VOTE = "refill"
-"""Not an opinion: "find me a new one". The recipe stays exactly as it was -- no star is written,
-nothing is hidden -- and the household's planner, which reads the feedback log, imports one new
-recipe in the same role into the recipe box. It is logged as an event like any vote so it can be
+"""Not an opinion: "find me a new one". No star is written and nobody's thumb moves, but the
+recipe drops out of the requester's own browse grids (the frontend hides it, as it hides a thumbs
+down) and the household's planner, which reads the feedback log, imports one new recipe in the
+same role into the recipe box. It is logged as an event like any vote so it can be
 undone from the same page, and so the planner can tell a request it has already filled from a
 fresh one."""
 
