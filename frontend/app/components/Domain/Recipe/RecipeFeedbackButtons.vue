@@ -123,9 +123,10 @@ const requested = computed(() => {
   return Date.now() - Date.parse(refill.createdAt) < REQUESTED_RECENTLY_MS;
 });
 
-// "Find me a new one": a request rather than a vote. It does not touch the thumbs, the star, or
-// what is hidden; the household's planner reads it from the feedback log and imports one new
-// recipe in this one's role. Pressing it again is a fresh request, on purpose: "another one".
+// "Find me a new one": a request rather than a vote. It does not touch the thumbs or the star,
+// but it does take this recipe out of the presser's own grids until a later thumb or an undo
+// lifts it; the household's planner reads it from the feedback log and imports one new recipe in
+// this one's role. Pressing it again is a fresh request, on purpose: "another one".
 async function requestRefill() {
   if (saving.value) {
     return;
