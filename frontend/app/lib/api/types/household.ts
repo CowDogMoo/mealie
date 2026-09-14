@@ -9,6 +9,26 @@ export type GroupRecipeActionType = "link" | "post";
 export type WebhookType = "mealplan";
 export type RecipeSourceStatus = "known-good" | "caution" | "blocked";
 
+export interface CartRequestOut {
+  shoppingListId: string;
+  shoppingListName?: string | null;
+  requestId: string;
+  status: string;
+  requestedAt: string;
+  requestedBy: string;
+  requestedByName: string;
+  itemCount: number;
+  updatedAt?: string | null;
+  result?: string | null;
+}
+export interface CartRequestUpdate {
+  requestId: string;
+  status: string;
+  result?: string | null;
+}
+export interface CartRequests {
+  requests?: CartRequestOut[];
+}
 export interface CreateGroupRecipeAction {
   actionType: GroupRecipeActionType;
   title: string;

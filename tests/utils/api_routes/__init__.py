@@ -119,6 +119,8 @@ households_recipe_sources_lookup = "/api/households/recipe-sources/lookup"
 """`/api/households/recipe-sources/lookup`"""
 households_self = "/api/households/self"
 """`/api/households/self`"""
+households_shopping_cart_requests = "/api/households/shopping/cart-requests"
+"""`/api/households/shopping/cart-requests`"""
 households_shopping_items = "/api/households/shopping/items"
 """`/api/households/shopping/items`"""
 households_shopping_items_create_bulk = "/api/households/shopping/items/create-bulk"
@@ -418,6 +420,11 @@ def households_shopping_items_item_id(item_id):
 def households_shopping_lists_item_id(item_id):
     """`/api/households/shopping/lists/{item_id}`"""
     return f"{prefix}/households/shopping/lists/{item_id}"
+
+
+def households_shopping_lists_item_id_cart_request(item_id):
+    """`/api/households/shopping/lists/{item_id}/cart-request`"""
+    return f"{prefix}/households/shopping/lists/{item_id}/cart-request"
 
 
 def households_shopping_lists_item_id_label_settings(item_id):
