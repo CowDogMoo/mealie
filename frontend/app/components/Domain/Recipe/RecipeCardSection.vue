@@ -42,6 +42,10 @@
         </v-icon>
         {{ $vuetify.display.xs ? null : $t("general.random") }}
       </v-btn>
+      <RecipeCookTimeFilter
+        v-if="!disableCookTimeFilter"
+        v-model="cookTime"
+      />
       <v-menu
         v-if="!disableSort"
         offset-y
@@ -142,6 +146,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              :total-minutes="recipe.totalMinutes"
               show-feedback
             />
           </v-col>
@@ -167,6 +172,7 @@
               :image="recipe.image!"
               :tags="recipe.tags!"
               :recipe-id="recipe.id!"
+              :total-minutes="recipe.totalMinutes"
               show-feedback
             />
           </v-col>
@@ -189,6 +195,8 @@
 import { useThrottleFn } from "@vueuse/core";
 import RecipeCard from "./RecipeCard.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
+import RecipeCookTimeFilter from "./RecipeCookTimeFilter.vue";
+import { type CookTimeChoice, combineQueryFilters, cookTimeQueryFilter } from "~/composables/recipes/use-cook-time";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
 import { useUserSelfFeedback } from "~/composables/use-users";
@@ -203,6 +211,7 @@ const APPEND_RECIPES_EVENT = "appendRecipes";
 interface Props {
   disableToolbar?: boolean;
   disableSort?: boolean;
+  disableCookTimeFilter?: boolean;
   icon?: string | null;
   title?: string | null;
   singleColumn?: boolean;
@@ -276,8 +285,12 @@ const { fetchMore, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupS
 const { savePosition, getSavedPage, restorePosition } = useScrollPosition();
 const router = useRouter();
 
+// Server-side on purpose: the grid pages in as you scroll, so filtering what is
+// already loaded would be right on the first screenful and wrong on the second.
+const cookTime = ref<CookTimeChoice>("any");
+
 const queryFilter = computed(() => {
-  return props.query?.queryFilter || null;
+  return combineQueryFilters(props.query?.queryFilter, cookTimeQueryFilter(cookTime.value));
 
   // TODO: allow user to filter out null values when ordering by a value that may be null (such as lastMade)
 
@@ -337,6 +350,12 @@ onMounted(async () => {
     }
   }
   loading.value = false;
+});
+
+watch(cookTime, async () => {
+  ready.value = false;
+  await initRecipes();
+  ready.value = true;
 });
 
 let lastQuery: string | undefined = JSON.stringify(props.query);

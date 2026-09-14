@@ -22,6 +22,7 @@
           :recipe-id="recipeId"
           :image-version="image"
         >
+          <RecipeCookTimeBadge :total-minutes="totalMinutes" />
           <v-expand-transition v-if="description">
             <div
               v-if="isHovering"
@@ -118,6 +119,7 @@ import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeChips from "./RecipeChips.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
+import RecipeCookTimeBadge from "./RecipeCookTimeBadge.vue";
 import RecipeCardRating from "./RecipeCardRating.vue";
 import RecipeFeedbackButtons from "./RecipeFeedbackButtons.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
@@ -133,6 +135,7 @@ interface Props {
   recipeId: string;
   imageHeight?: number;
   showFeedback?: boolean;
+  totalMinutes?: number | null;
 }
 const props = withDefaults(defineProps<Props>(), {
   description: null,
@@ -142,6 +145,7 @@ const props = withDefaults(defineProps<Props>(), {
   tags: () => [],
   imageHeight: 200,
   showFeedback: false,
+  totalMinutes: null,
 });
 
 defineEmits<{

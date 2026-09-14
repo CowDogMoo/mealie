@@ -15,6 +15,7 @@ from mealie.db.models._model_utils.auto_init import auto_init
 from mealie.db.models._model_utils.datetime import NaiveDateTime, get_utc_today
 from mealie.db.models._model_utils.guid import GUID
 from mealie.db.models.recipe.ingredient import RecipeIngredientModel
+from mealie.pkgs.cooktime import total_minutes as parse_total_minutes
 
 from .._model_base import BaseMixins, FilterableColumn, SqlAlchemyBase
 from ..household.household_to_recipe import HouseholdToRecipe
@@ -85,6 +86,12 @@ class RecipeModel(SqlAlchemyBase, BaseMixins):
 
     # Time Related Properties
     total_time: FilterableColumn[str | None] = mapped_column(sa.String)
+    # `total_time` is free text because that is what recipe sites emit and what a
+    # person types. A string cannot answer "what can I cook on a Tuesday", so the
+    # length is parsed once on the way in and kept here. Derived, never accepted
+    # from input -- see `_derive_total_minutes` below. Indexed because filtering
+    # and sorting the browse grid by cook time is the whole point of it existing.
+    total_minutes: FilterableColumn[int | None] = mapped_column(sa.Integer, index=True)
     prep_time: FilterableColumn[str | None] = mapped_column(sa.String)
     perform_time: FilterableColumn[str | None] = mapped_column(sa.String)
     cook_time: FilterableColumn[str | None] = mapped_column(sa.String)
@@ -279,6 +286,31 @@ def receive_description(target: RecipeModel, value: str, oldvalue, initiator):
         target.description_normalized = RecipeModel.normalize(value)
     else:
         target.description_normalized = None
+
+
+@event.listens_for(RecipeModel.total_time, "set")
+def receive_total_time(target: RecipeModel, value, oldvalue, initiator):
+    """Keep the parsed length fresh in memory, the way `name_normalized` is kept.
+
+    This is what lets code set `total_time` and read `total_minutes` back before
+    the flush. It is not what makes the stored value trustworthy -- see
+    `derive_total_minutes` below, which is the one that cannot be got around.
+    """
+    target.total_minutes = parse_total_minutes(value)
+
+
+@event.listens_for(RecipeModel, "before_insert")
+@event.listens_for(RecipeModel, "before_update")
+def derive_total_minutes(mapper, connection, target: RecipeModel):
+    """The stored length is derived from `total_time` at write time, always.
+
+    `total_minutes` is on the recipe schema so the UI can read it, which means a
+    client PUTting a whole recipe back sends a value for it -- and when the user
+    has just edited the cook time, the value it sends is the old one. Deriving
+    here, after everything else has been assigned, means input order and stale
+    client values cannot decide what a filter later reads.
+    """
+    target.total_minutes = parse_total_minutes(target.total_time)
 
 
 @event.listens_for(RecipeModel, "before_update")
