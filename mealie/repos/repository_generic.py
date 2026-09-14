@@ -483,7 +483,16 @@ class RepositoryGeneric[Schema: MealieModel, Model: SqlAlchemyBase]:
                         detail=f'Invalid order_by statement "{request_query.order_by}": "{order_by_val}" is invalid',
                     ) from e
 
-            return query
+            # Break ties on the primary key, so the ordering is total.
+            #
+            # Each page is its own query, and rows that tie on every ORDER BY
+            # column may come back in a different order for each one. Without a
+            # tiebreaker a paginated walk then hands the same row back on two
+            # pages and never hands back another. Postgres reorders ties freely,
+            # SQLite happens not to, so this fails on half the matrix and reads
+            # as flake. Ties are ordinary, not exotic -- cook time, rating and
+            # the default created_at ordering all repeat across a real library.
+            return query.order_by(self.model.id)
 
     def add_search_to_query(self, query: Select, schema: type[Schema], search: str) -> Select:
         search_filter = SearchFilter(self.session, search, schema._normalize_search)

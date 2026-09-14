@@ -105,6 +105,49 @@ def test_repository_pagination(unique_user: TestUser):
         assert result.id not in seen
 
 
+def test_pagination_over_tied_order_values_returns_every_row_once(unique_user_fn_scoped: TestUser):
+    """A paginated walk sees each row exactly once, even when the ordering column ties.
+
+    Every page is its own query, so rows the ORDER BY cannot tell apart may come
+    back in a different order each time. When that happens the walk loses rows:
+    one recipe arrives on two pages and another never arrives at all. Postgres
+    reorders ties freely, SQLite happens not to, so a missing tiebreaker fails on
+    only half the matrix and looks like flake.
+
+    Ties are the ordinary case here -- a real library repeats cook times, ratings
+    and creation timestamps constantly.
+    """
+    database = unique_user_fn_scoped.repos
+    recipes_repo = database.recipes
+
+    # Three cook times over twelve recipes: every value is a four-way tie.
+    created = [
+        recipes_repo.create(
+            Recipe(
+                user_id=unique_user_fn_scoped.user_id,
+                group_id=unique_user_fn_scoped.group_id,
+                name=random_string(10),
+                total_time=total_time,
+            )
+        )
+        for _ in range(4)
+        for total_time in ("20 minutes", "45 minutes", "90 minutes")
+    ]
+
+    seen: list[UUID4] = []
+    page = 1
+    while True:
+        results = recipes_repo.page_all(PaginationQuery(page=page, per_page=2, order_by="total_time"))
+        seen += [item.id for item in results.items]
+        if page >= results.total_pages or not results.items:
+            break
+        page += 1
+
+    assert page > 1, "per_page=2 over twelve recipes should have needed more than one page"
+    assert len(seen) == len(set(seen)), "a recipe was handed back on more than one page"
+    assert set(seen) == {recipe.id for recipe in created}, "a recipe never appeared on any page"
+
+
 def test_pagination_response_and_metadata(unique_user: TestUser):
     database = unique_user.repos
     group = database.groups.get_one(unique_user.group_id)
