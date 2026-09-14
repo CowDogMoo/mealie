@@ -38,9 +38,16 @@ TOO_LONG = {"long-61", "long-75", "long-125"}
 UNTIMED = {"untimed"}
 
 
-@pytest.fixture()
-def cook_time_library(api_client: TestClient, unique_user: TestUser) -> dict[str, str]:
-    """One recipe per cook-time form, named so a result set is readable in a failure."""
+@pytest.fixture(scope="module")
+def cook_time_library(unique_user: TestUser) -> dict[str, str]:
+    """One recipe per cook-time form, named so a result set is readable in a failure.
+
+    Module-scoped to match `unique_user`. Function scope under a module-scoped
+    user built a fresh library per test against the same account, so the last
+    test in the file read eight tests' worth of recipes and the size of the
+    result set depended on which tests ran. Every test here only reads, so one
+    library serves all of them.
+    """
     database = unique_user.repos
     slugs: dict[str, str] = {}
     prefix = random_string(8)
