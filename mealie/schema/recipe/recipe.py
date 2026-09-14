@@ -130,6 +130,10 @@ class RecipeSummary(MealieModel):
     recipe_yield: str | None = None
 
     total_time: str | None = None
+    # Derived from total_time on write and never read from input -- see
+    # `derive_total_minutes` in the recipe model. It is here so the UI can badge
+    # and filter by cook time; a client sending it back is ignored.
+    total_minutes: int | None = None
     prep_time: str | None = None
     cook_time: str | None = None
     perform_time: str | None = None

@@ -86,6 +86,7 @@ export interface RecipeSummary {
   recipeYieldQuantity?: number;
   recipeYield?: string | null;
   totalTime?: string | null;
+  totalMinutes?: number | null;
   prepTime?: string | null;
   cookTime?: string | null;
   performTime?: string | null;

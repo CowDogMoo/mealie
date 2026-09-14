@@ -52,8 +52,12 @@
             </slot>
           </template>
           <div class="pl-4 d-flex flex-column justify-space-between align-stretch pr-2">
-            <v-list-item-title class="mt-3 mb-1 text-top text-truncate w-100">
-              {{ name }}
+            <v-list-item-title class="mt-3 mb-1 text-top d-flex align-center w-100">
+              <span class="text-truncate">{{ name }}</span>
+              <RecipeCookTimeBadge
+                inline
+                :total-minutes="totalMinutes"
+              />
             </v-list-item-title>
             <v-list-item-subtitle class="ma-0 text-top">
               <SafeMarkdown v-if="description" :source="description" />
@@ -143,6 +147,7 @@ import { useDisplay } from "vuetify";
 import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
+import RecipeCookTimeBadge from "./RecipeCookTimeBadge.vue";
 import RecipeCardRating from "./RecipeCardRating.vue";
 import RecipeFeedbackButtons from "./RecipeFeedbackButtons.vue";
 import RecipeChips from "./RecipeChips.vue";
@@ -161,6 +166,7 @@ interface Props {
   height?: number;
   disableHighlight?: boolean;
   showFeedback?: boolean;
+  totalMinutes?: number | null;
 }
 const props = withDefaults(defineProps<Props>(), {
   rating: 0,
@@ -171,6 +177,7 @@ const props = withDefaults(defineProps<Props>(), {
   height: 150,
   disableHighlight: false,
   showFeedback: false,
+  totalMinutes: null,
 });
 
 defineEmits<{
