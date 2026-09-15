@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from freezegun import freeze_time
 from humps import camelize
 from pydantic import UUID4
+from sqlalchemy import select
 
 from mealie.repos.repository_factory import AllRepositories
 from mealie.repos.repository_units import RepositoryUnit
@@ -146,6 +147,29 @@ def test_pagination_over_tied_order_values_returns_every_row_once(unique_user_fn
     assert page > 1, "per_page=2 over twelve recipes should have needed more than one page"
     assert len(seen) == len(set(seen)), "a recipe was handed back on more than one page"
     assert set(seen) == {recipe.id for recipe in created}, "a recipe never appeared on any page"
+
+
+def test_pagination_order_by_always_appends_a_tiebreaker(unique_user_fn_scoped: TestUser):
+    """The ordering itself carries a tiebreaker, on every engine.
+
+    The walk test above only reproduces the bug on PostgreSQL: SQLite happens to
+    return tied rows in a stable order, so it passes there whether or not the
+    tiebreaker exists. Asserting the ORDER BY rather than the symptom means
+    dropping the tiebreaker fails the suite on either engine, instead of only on
+    half the CI matrix.
+    """
+    repo = unique_user_fn_scoped.repos.recipes
+    query = repo.add_order_by_to_query(
+        select(repo.model),
+        PaginationQuery(page=1, per_page=10, order_by="total_time"),
+    )
+
+    sql = " ".join(str(query).split())
+    _, _, ordering = sql.partition("ORDER BY ")
+    assert ordering, f"no ORDER BY was applied: {sql}"
+    assert ordering.endswith(f"{repo.model.__tablename__}.id"), (
+        f"ordering has no primary-key tiebreaker, so paging over ties can drop rows: {ordering}"
+    )
 
 
 def test_pagination_response_and_metadata(unique_user: TestUser):
