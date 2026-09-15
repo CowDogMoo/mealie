@@ -7,6 +7,23 @@ on:
 jobs:
   commit-version-bump:
     name: Commit version bump to repository
+    # Upstream-only, same gate nightly.yml uses. This whole workflow is the
+    # maintainers' release pipeline: it needs their GitHub App credentials, it
+    # pushes a version bump to the default branch, and publish.yml builds it
+    # through Depot.dev with their Docker Hub secrets. None of that exists on a
+    # fork, so on CowDogMoo/mealie it dies on the first step - "Generate GitHub
+    # App Token" - and every later job skips.
+    #
+    # That is noise, not safety. It only fires because this fork now cuts its
+    # releases through the GitHub Releases UI (an operator with a browser and no
+    # shell), and publishing a release emits `release: published` alongside the
+    # tag push that woe-image.yml actually wants. Gating here means one red X
+    # does not appear next to every good release.
+    #
+    # Measured: v3.24.0-woe.12 fired this as "Docker Build Production" #1 and it
+    # failed at Generate GitHub App Token; mealie-next was unchanged and nothing
+    # was published, so this is cosmetic - but it hides real failures in noise.
+    if: github.repository == 'mealie-recipes/mealie'
     runs-on: ubuntu-latest
     permissions:
       contents: write
