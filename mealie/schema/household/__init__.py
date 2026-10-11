@@ -68,6 +68,13 @@ from .household_preferences import (
 )
 from .household_statistics import HouseholdStatistics
 from .invite_token import CreateInviteToken, EmailInitationResponse, EmailInvitation, ReadInviteToken, SaveInviteToken
+from .recipe_request import (
+    RecipeRequestCreate,
+    RecipeRequestOut,
+    RecipeRequests,
+    RecipeRequestSave,
+    RecipeRequestUpdate,
+)
 from .recipe_source import (
     RecipeSourceCreate,
     RecipeSourceLookupOut,
@@ -127,6 +134,11 @@ __all__ = [
     "ShoppingListSave",
     "ShoppingListSummary",
     "ShoppingListUpdate",
+    "RecipeRequestCreate",
+    "RecipeRequestOut",
+    "RecipeRequestSave",
+    "RecipeRequestUpdate",
+    "RecipeRequests",
     "HouseholdCreate",
     "HouseholdInDB",
     "HouseholdPagination",

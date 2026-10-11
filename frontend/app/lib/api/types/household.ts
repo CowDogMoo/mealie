@@ -290,6 +290,40 @@ export interface ReadInviteToken {
   groupId: string;
   householdId: string;
 }
+export interface RecipeRequestCreate {
+  note?: string | null;
+}
+export interface RecipeRequestOut {
+  note?: string | null;
+  groupId: string;
+  householdId: string;
+  status?: string;
+  requestedBy?: string | null;
+  requestedByName?: string | null;
+  id: string;
+  result?: string | null;
+  recipeId?: string | null;
+  recipeSlug?: string | null;
+  recipeName?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+export interface RecipeRequestSave {
+  note?: string | null;
+  groupId: string;
+  householdId: string;
+  status?: string;
+  requestedBy?: string | null;
+  requestedByName?: string | null;
+}
+export interface RecipeRequestUpdate {
+  status: string;
+  result?: string | null;
+  recipeSlug?: string | null;
+}
+export interface RecipeRequests {
+  requests?: RecipeRequestOut[];
+}
 export interface RecipeSourceCreate {
   domain: string;
   status?: RecipeSourceStatus;

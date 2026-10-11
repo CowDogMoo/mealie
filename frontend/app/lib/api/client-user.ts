@@ -12,6 +12,7 @@ import { UnitAPI } from "./user/recipe-units";
 import { CookbookAPI } from "./user/group-cookbooks";
 import { GroupRecipeActionsAPI } from "./user/group-recipe-actions";
 import { WebhooksAPI } from "./user/group-webhooks";
+import { HouseholdRecipeRequestsAPI } from "./user/household-recipe-requests";
 import { HouseholdRecipeSourcesAPI } from "./user/household-recipe-sources";
 import { RegisterAPI } from "./user/user-registration";
 import { MealPlanAPI } from "./user/group-mealplan";
@@ -42,6 +43,7 @@ export class UserApiClient {
   public cookbooks: CookbookAPI;
   public groupRecipeActions: GroupRecipeActionsAPI;
   public groupWebhooks: WebhooksAPI;
+  public recipeRequests: HouseholdRecipeRequestsAPI;
   public recipeSources: HouseholdRecipeSourcesAPI;
   public register: RegisterAPI;
   public mealplans: MealPlanAPI;
@@ -74,6 +76,7 @@ export class UserApiClient {
     this.cookbooks = new CookbookAPI(requests);
     this.groupRecipeActions = new GroupRecipeActionsAPI(requests);
     this.groupWebhooks = new WebhooksAPI(requests);
+    this.recipeRequests = new HouseholdRecipeRequestsAPI(requests);
     this.recipeSources = new HouseholdRecipeSourcesAPI(requests);
     this.register = new RegisterAPI(requests);
     this.mealplans = new MealPlanAPI(requests);

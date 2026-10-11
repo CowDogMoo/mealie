@@ -20,7 +20,11 @@
         @item-selected="onItemSelected"
         @replace-recipes="replaceRecipes"
         @append-recipes="appendRecipes"
-      />
+      >
+        <template v-if="isOwnGroup" #below-toolbar>
+          <RecipeRequestBar :group-slug="groupSlug" />
+        </template>
+      </RecipeCardSection>
     </v-container>
   </v-container>
 </template>
@@ -29,6 +33,7 @@
 import RecipeExplorerPageSearch from "./RecipeExplorerPageParts/RecipeExplorerPageSearch.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import RecipeCardSection from "~/components/Domain/Recipe/RecipeCardSection.vue";
+import RecipeRequestBar from "~/components/Domain/Recipe/RecipeRequestBar.vue";
 import { useLazyRecipes } from "~/composables/recipes";
 
 const auth = useMealieAuth();

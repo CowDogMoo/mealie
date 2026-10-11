@@ -1305,5 +1305,25 @@
       "cuisine": "This kind of food",
       "source": "Anything from this source"
     }
+  },
+  "recipe-request": {
+    "find-new": "Find a new recipe",
+    "dialog-title": "Find a new recipe?",
+    "dialog-detail": "We'll look for a well-rated weeknight dinner this household hasn't had yet and add it to Recipes. Nothing is hidden and nothing on the meal plan changes.",
+    "note-label": "Anything in particular? (optional)",
+    "note-placeholder": "Something with lentils",
+    "submit": "Find one",
+    "requested": "Got it. A new recipe will show up under Recipes in a few minutes.",
+    "too-many": "A few requests are already waiting. Give them a few minutes, or cancel one.",
+    "failed-to-send": "That didn't go through. Try again in a moment.",
+    "pending": "{name} asked for a new recipe at {time}",
+    "filling": "Looking for a new recipe for {name}…",
+    "filled": "New recipe:",
+    "filled-unnamed": "A new recipe was added to Recipes",
+    "failed": "No new recipe this time",
+    "somebody": "Somebody",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "cannot-cancel-while-searching": "The search has already started, so it can't be cancelled. You can dismiss it once it finishes."
   }
 }
