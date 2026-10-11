@@ -113,6 +113,8 @@ households_ratings = "/api/households/ratings"
 """`/api/households/ratings`"""
 households_recipe_actions = "/api/households/recipe-actions"
 """`/api/households/recipe-actions`"""
+households_recipe_requests = "/api/households/recipe-requests"
+"""`/api/households/recipe-requests`"""
 households_recipe_sources = "/api/households/recipe-sources"
 """`/api/households/recipe-sources`"""
 households_recipe_sources_lookup = "/api/households/recipe-sources/lookup"
@@ -400,6 +402,11 @@ def households_recipe_actions_item_id(item_id):
 def households_recipe_actions_item_id_trigger_recipe_slug(item_id, recipe_slug):
     """`/api/households/recipe-actions/{item_id}/trigger/{recipe_slug}`"""
     return f"{prefix}/households/recipe-actions/{item_id}/trigger/{recipe_slug}"
+
+
+def households_recipe_requests_item_id(item_id):
+    """`/api/households/recipe-requests/{item_id}`"""
+    return f"{prefix}/households/recipe-requests/{item_id}"
 
 
 def households_recipe_sources_item_id(item_id):

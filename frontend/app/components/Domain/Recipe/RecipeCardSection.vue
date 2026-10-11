@@ -127,6 +127,7 @@
         @toggle-dense-view="toggleMobileCards()"
       />
     </v-row>
+    <slot name="below-toolbar" />
     <div v-if="recipes && ready">
       <div class="mt-2">
         <v-row v-if="!useMobileCards">

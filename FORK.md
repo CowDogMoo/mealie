@@ -128,6 +128,21 @@ if the two drift. One list may owe only one fill at a time, a list with nothing 
 refused rather than queued, and a report carrying a request id the list no longer holds is
 refused so a late fill cannot claim a request nobody made.
 
+**A recipe request.** The Recipes page carries a "Find a new recipe" button, with an optional
+note ("something with lentils"). `POST /api/households/recipe-requests` records the ask in its
+own table, `household_recipe_requests` (revision `f6c1d8e3b597`); the cluster runner polls
+`GET ?status=pending`, claims a request with `PUT` (`filling`), and reports it `filled` with the
+slug of the recipe it imported, or `failed` with why. A `filled` report is refused unless that
+slug is really in the household's recipes, so the page never announces a recipe that did not
+land. `DELETE` cancels a waiting request or dismisses a finished one. It is the die on a recipe
+card without the recipe: nothing is hidden, rated or planned. A household may have five
+waiting at once (`MAX_OPEN_RECIPE_REQUESTS`), because each is a recipe search on the household's
+Claude subscription. `mealie/schema/household/recipe_request.py` is the copy of record for the
+statuses and the note limit; `frontend/app/composables/use-recipe-requests.ts` holds the
+TypeScript copy, with a test that fails if the two drift. The upstream edits are a
+`below-toolbar` slot in `RecipeCardSection.vue`, the bar in that slot on
+`RecipeExplorerPage.vue`, and the usual model, repository, router and client registrations.
+
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
 already reads ≤2 as a dislike and ≥4 as a like, so nothing downstream had to change on day
@@ -136,6 +151,9 @@ one. The feedback row is the record; the star is a projection of it.
 ## Conflict surface
 
 ```
+mealie/db/models/group/group.py
+mealie/db/models/household/__init__.py
+mealie/db/models/household/household.py
 mealie/db/models/users/__init__.py
 mealie/repos/repository_recipes.py
 mealie/repos/repository_shopping_list.py
@@ -143,6 +161,7 @@ mealie/repos/repository_users.py
 mealie/repos/repository_factory.py
 mealie/routes/users/__init__.py
 mealie/routes/households/__init__.py
+mealie/schema/household/__init__.py
 mealie/schema/recipe/__init__.py
 mealie/schema/user/__init__.py
 tests/utils/api_routes/__init__.py
@@ -150,6 +169,7 @@ frontend/app/lib/api/types/household.ts
 frontend/app/lib/api/types/meal-plan.ts
 frontend/app/lib/api/types/recipe.ts
 frontend/app/lib/api/types/user.ts
+frontend/app/lib/api/client-user.ts
 frontend/app/lib/api/user/users.ts
 frontend/app/lib/api/user/households.ts
 frontend/app/composables/use-users/index.ts
@@ -158,6 +178,7 @@ frontend/vitest.config.js
 frontend/app/components/Domain/Recipe/RecipeCard.vue
 frontend/app/components/Domain/Recipe/RecipeCardMobile.vue
 frontend/app/components/Domain/Recipe/RecipeCardSection.vue
+frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPage.vue
 frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCard.vue
 frontend/app/pages/household/mealplan/planner/view.vue
 frontend/app/pages/shopping-lists/[id].vue
