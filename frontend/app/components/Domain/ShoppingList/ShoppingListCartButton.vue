@@ -77,7 +77,8 @@ import { alert } from "~/composables/use-toast";
 import type { ShoppingListOut } from "~/lib/api/types/household";
 
 /**
- * "Send to Whole Foods" and everything that follows from it.
+ * "Add to Whole Foods cart" and everything that follows from it. The cart itself is filled by the
+ * cart watcher on Jayson's Mac (personal-skills, add-groceries-to-whole-foods-cart).
  *
  * The confirmation is the point of this component. Every other action on a shopping list is
  * reversible by tapping again; this one asks somebody to go and spend money, so it names what will

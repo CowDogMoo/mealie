@@ -191,7 +191,7 @@ describe("what the list shows once a request exists", () => {
     expect(wrapper.find("[data-test=\"cart-request-send\"]").exists()).toBe(false);
     const status = wrapper.find("[data-test=\"cart-request-status\"]");
     expect(status.text()).toContain("amanda");
-    expect(status.text()).toContain("Waiting to be put in the cart");
+    expect(status.text()).toContain("Waiting for Jayson's Mac to fill the cart");
 
     await wrapper.find("[data-test=\"cart-request-clear\"]").trigger("click");
     await flushPromises();
@@ -213,7 +213,7 @@ describe("what the list shows once a request exists", () => {
     const wrapper = mountButton(listWith(pendingExtras({ [CART_REQUEST_EXTRAS.status]: "filling" })));
 
     expect(wrapper.find("[data-test=\"cart-request-clear\"]").exists()).toBe(false);
-    expect(wrapper.find("[data-test=\"cart-request-status\"]").text()).toContain("Filling the cart now");
+    expect(wrapper.find("[data-test=\"cart-request-status\"]").text()).toContain("Adding items to the cart now");
   });
 
   test("a finished request shows what the filler reported and can be dismissed", () => {
@@ -224,7 +224,7 @@ describe("what the list shows once a request exists", () => {
     })));
 
     const status = wrapper.find("[data-test=\"cart-request-status\"]");
-    expect(status.text()).toContain("ready to review and check out");
+    expect(status.text()).toContain("Ready to review and check out on Amazon");
     expect(status.text()).toContain("9 in the cart, no organic peaches");
     expect(wrapper.find("[data-test=\"cart-request-clear\"]").text()).toBe("Dismiss");
   });
