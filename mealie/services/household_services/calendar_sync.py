@@ -373,14 +373,15 @@ class CalendarSyncService(BaseService):
     def sync(self) -> CalendarSyncResult:
         """Sync now, for a person waiting on the answer. Waits for a running sync to finish first.
 
-        Raises when the household or the server is not set up, and when Google fails.
+        Raises when the household or the server is not set up, and when the sync itself fails
+        (`CalendarSyncFailedError`).
         """
 
         row, credentials = self._ready()
         return sync_gate.wait_turn(self.household_id, lambda: self._sync(row, credentials))
 
     def sync_if_enabled(self) -> CalendarSyncResult | None:
-        """Sync if this household mirrors its plan, and never raise over Google.
+        """Sync if this household mirrors its plan, and never raise over a sync that fails.
 
         For the triggers nobody is waiting on. A household that is not set up is simply skipped,
         without a call to Google; a failure is recorded on the row and reported as None. The

@@ -206,11 +206,12 @@ property is never touched, and events before yesterday are left as a record of w
 event id is stored in Mealie, so there is nothing to drift. A dinner is a timed event from 6:00 PM
 to 8:00 PM on its date; every other kind of meal is an all-day event; both are marked free, so
 neither blocks anyone's time. The hours are in the server's time zone, the `TZ` the container is
-started with (it has to be `America/Denver` for this household), because Mealie keeps no time zone per household; the offset
-is worked out for the date itself, so dinner stays at six across a daylight-saving change. With
-`TZ` unset, or not the name of an IANA time zone, a sync changes nothing on the calendar and fails
-with a `last_error` that names the `TZ` to fix. A dinner an older version wrote
-as an all-day event is patched into its hours by the next sync, in place. Three things set a sync off: the meal
+started with (it has to be `America/Denver` for this household), because Mealie keeps no
+time zone per household; the offset is worked out for the date itself, so dinner stays
+at six across a daylight-saving change. With `TZ` unset, or not the name of an IANA time
+zone, a sync changes nothing on the calendar and fails with a `last_error` that names
+the `TZ` to fix. A dinner an older version wrote as an all-day event is patched into its
+hours by the next sync, in place. Three things set a sync off: the meal
 plan's own `mealplan_entry_*` events on the event bus (a new listener, run as a background task
 after the response, so a Google failure can neither fail nor slow a plan change);
 `POST /api/households/calendar-sync/sync`, the page's "Sync now"; and an hourly scheduler task,
@@ -229,7 +230,8 @@ Turning it on is three steps, and only the first needs whoever runs the server:
    Google Cloud downloads: `type`, `client_email`, `private_key`, `token_uri`, ...) and restart.
    The Google Cloud project behind the key needs the Calendar API enabled. Any file named
    `GOOGLE_CALENDAR_CREDENTIALS` under `/run/secrets` is read the same way. The value is masked in
-   the settings dump at startup, and no route returns it.
+   the settings dump at startup, and no route returns it. The same container needs its `TZ` set
+   to the household's time zone (above); without it every sync fails.
 2. In Google Calendar, share the calendar with the key's `client_email` -- the page shows it, with
    a copy button -- and choose "Make changes to events".
 3. On `/household/google-calendar`, paste the calendar's id (Settings > Integrate calendar), switch
