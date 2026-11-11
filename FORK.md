@@ -208,7 +208,8 @@ to 8:00 PM on its date; every other kind of meal is an all-day event; both are m
 neither blocks anyone's time. The hours are in the server's time zone, the `TZ` the container is
 started with (it has to be `America/Denver` for this household), because Mealie keeps no time zone per household; the offset
 is worked out for the date itself, so dinner stays at six across a daylight-saving change. With
-`TZ` unset the server is on UTC and dinner lands at 6:00 PM UTC. A dinner an older version wrote
+`TZ` unset, or not the name of an IANA time zone, a sync changes nothing on the calendar and fails
+with a `last_error` that names the `TZ` to fix. A dinner an older version wrote
 as an all-day event is patched into its hours by the next sync, in place. Three things set a sync off: the meal
 plan's own `mealplan_entry_*` events on the event bus (a new listener, run as a background task
 after the response, so a Google failure can neither fail nor slow a plan change);

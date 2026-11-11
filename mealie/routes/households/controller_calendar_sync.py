@@ -66,7 +66,8 @@ class CalendarSyncController(BaseUserController):
         """Make the calendar match the plan now, and report how many events that took.
 
         Refused (409) while the household has not turned its mirror on, or the server has no
-        credentials. A failure on Google's side is a 502, and is also what `lastError` then says.
+        credentials. A sync that fails is a 502, and is also what `lastError` then says: a failure
+        on Google's side, or a server whose `TZ` names no time zone.
         """
 
         try:

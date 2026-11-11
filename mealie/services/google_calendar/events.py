@@ -10,6 +10,7 @@ and is never read as ours.
 
 from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from mealie.schema.meal_plan.new_meal import PlanEntryType, ReadPlanEntry
 from mealie.services.urls.url_constructors import recipe_url
@@ -29,8 +30,8 @@ DINNER_END = time(20, 0)
 other kind of meal has no hour of its own and is an all-day event."""
 
 EDGE_FIELDS = ("date", "dateTime", "timeZone")
-"""What an event's start or end can be made of: a date for an all-day event, or a clock time and,
-optionally, the name of the zone it was written in."""
+"""What an event's start or end can be made of: a date for an all-day event, or a clock time and
+the name of the zone it was written in."""
 
 
 def recipe_link(entry: ReadPlanEntry, base_url: str, group_slug: str | None) -> str | None:
@@ -50,23 +51,17 @@ def event_summary(entry: ReadPlanEntry) -> str:
     return f"{kind}: {what}" if what else kind
 
 
-def _edge(day: date, at: time, zone: tzinfo) -> dict[str, str]:
+def _edge(day: date, at: time, zone: ZoneInfo) -> dict[str, str]:
     """One end of a timed event: the wall-clock time on that day, with the offset the zone has then.
 
     The offset is worked out for the day itself, so an event on either side of a daylight-saving
-    change is at the same hour on the kitchen clock. A zone that knows its own name (an IANA one,
-    like America/Denver) is named too.
+    change is at the same hour on the kitchen clock. The zone is named too.
     """
 
-    edge = {"dateTime": datetime.combine(day, at, tzinfo=zone).isoformat()}
-    name = getattr(zone, "key", None)
-    if name:
-        edge["timeZone"] = str(name)
-
-    return edge
+    return {"dateTime": datetime.combine(day, at, tzinfo=zone).isoformat(), "timeZone": zone.key}
 
 
-def event_times(entry: ReadPlanEntry, zone: tzinfo) -> tuple[dict[str, str], dict[str, str]]:
+def event_times(entry: ReadPlanEntry, zone: ZoneInfo) -> tuple[dict[str, str], dict[str, str]]:
     """When an entry's event starts and ends: six to eight for a dinner, the whole day otherwise."""
 
     if entry.entry_type == PlanEntryType.dinner:
@@ -77,7 +72,7 @@ def event_times(entry: ReadPlanEntry, zone: tzinfo) -> tuple[dict[str, str], dic
 
 
 def event_body(
-    entry: ReadPlanEntry, *, household_id: str, base_url: str, group_slug: str | None, zone: tzinfo
+    entry: ReadPlanEntry, *, household_id: str, base_url: str, group_slug: str | None, zone: ZoneInfo
 ) -> dict[str, Any]:
     """The event a plan entry should be: on the entry's date, blocking nobody's time.
 
@@ -129,12 +124,13 @@ def _instant(value: Any) -> datetime | None:
     return moment if moment is not None and moment.tzinfo is not None else None
 
 
-def start_date_of(event: dict[str, Any], zone: tzinfo | None = None) -> str | None:
-    """The date of an all-day event, or the day a timed one starts on.
+def start_date_of(event: dict[str, Any], zone: tzinfo) -> str | None:
+    """The date of an all-day event, or the day a timed one starts on in `zone`.
 
     Google hands a timed event back in the calendar's own zone, which need not be the server's: six
-    in the evening in Denver is already tomorrow in London. Given `zone`, the day is read there, so
-    it is the day of the plan entry the event was written for.
+    in the evening in Denver is already tomorrow in London. The day is read in `zone`, so it is the
+    day of the plan entry the event was written for. A `dateTime` that names no moment is read by
+    the date it opens with.
     """
 
     start = event.get("start") or {}
@@ -142,9 +138,9 @@ def start_date_of(event: dict[str, Any], zone: tzinfo | None = None) -> str | No
         return str(start["date"])
     if start.get("dateTime"):
         moment = _instant(start["dateTime"])
-        if moment is not None and zone is not None:
-            return moment.astimezone(zone).date().isoformat()
-        return str(start["dateTime"])[:10]
+        if moment is None:
+            return str(start["dateTime"])[:10]
+        return moment.astimezone(zone).date().isoformat()
     return None
 
 

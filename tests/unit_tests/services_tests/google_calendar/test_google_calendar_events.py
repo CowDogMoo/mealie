@@ -2,7 +2,7 @@
 calendar equal to a plan, and for the gate that keeps two reconciles from overlapping."""
 
 import threading
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -23,6 +23,7 @@ from mealie.services.google_calendar.events import (
     start_date_of,
 )
 from mealie.services.household_services.calendar_sync import (
+    CalendarSyncTimeZoneError,
     HouseholdSyncGate,
     reconcile,
     server_zone,
@@ -100,14 +101,6 @@ def test_every_other_kind_of_meal_is_still_an_all_day_event(kind: str):
     assert event["end"] == {"date": "2026-11-13"}
     assert event["transparency"] == "transparent"
     assert event["extendedProperties"] == {"private": {HOUSEHOLD_PROPERTY: HOUSEHOLD, ENTRY_PROPERTY: "41"}}
-
-
-def test_a_zone_without_a_name_still_gives_dinner_its_offset():
-    fixed = timezone(timedelta(hours=-7))
-    event = event_body(entry(), household_id=HOUSEHOLD, base_url=BASE_URL, group_slug="home", zone=fixed)
-
-    assert event["start"] == {"dateTime": "2026-11-12T18:00:00-07:00"}
-    assert event["end"] == {"dateTime": "2026-11-12T20:00:00-07:00"}
 
 
 def test_an_entry_that_is_only_a_note_uses_its_title_and_links_nowhere():
@@ -232,7 +225,12 @@ def test_a_timed_events_day_is_read_in_the_zone_it_was_written_in():
     assert start_date_of({"start": {"date": "2026-11-12"}}, DENVER) == "2026-11-12"
     # six in the evening in Denver, handed back by a calendar kept in UTC
     assert start_date_of({"start": {"dateTime": "2026-11-13T01:00:00Z"}}, DENVER) == "2026-11-12"
-    assert start_date_of({"start": {"dateTime": "2026-11-13T01:00:00Z"}}) == "2026-11-13"
+    assert (
+        start_date_of({"start": {"dateTime": "2026-11-12T18:00:00-07:00"}}, ZoneInfo("Europe/London")) == "2026-11-13"
+    )
+    # nothing that can be read as a moment: the date it opens with is all there is to go on
+    assert start_date_of({"start": {"dateTime": "2026-11-13 six-ish"}}, DENVER) == "2026-11-13"
+    assert start_date_of({"start": {"dateTime": "2026-11-13T01:00:00"}}, DENVER) == "2026-11-13"
     assert start_date_of({}, DENVER) is None
 
 
@@ -405,7 +403,7 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
     ours_but_stale = {**body(entry(entry_id=999)), "id": "stale"}
 
     calendar = UnfilteredCalendar([somebodys_own, neighbours, unmarked_entry, ours_but_stale])
-    result = reconcile(calendar, CALENDAR, HOUSEHOLD, {"41": wanted}, date(2026, 11, 11))  # type: ignore[arg-type]
+    result = reconcile(calendar, CALENDAR, HOUSEHOLD, {"41": wanted}, date(2026, 11, 11), DENVER)  # type: ignore[arg-type]
 
     # only the event that is ours is removed; the three that are not are neither patched nor
     # deleted, and none of them counts as entry 41's event, so that one is added
@@ -415,21 +413,46 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
     assert result.model_dump() == {"created": 1, "updated": 0, "deleted": 1}
 
 
-def test_the_servers_zone_is_the_one_tz_names_and_the_systems_own_otherwise(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("TZ", "America/Denver")
+@pytest.mark.parametrize("named", ["America/Denver", ":America/Denver", "  America/Denver  "])
+def test_the_servers_zone_is_the_one_tz_names(monkeypatch: pytest.MonkeyPatch, named: str):
+    monkeypatch.setenv("TZ", named)
+
     assert server_zone() == DENVER
 
-    for unusable in ("", "Not/A_Zone", "MST7MDT,M3.2.0,M11.1.0"):
-        monkeypatch.setenv("TZ", unusable)
-        zone = server_zone()
-        assert not isinstance(zone, ZoneInfo)
-        assert datetime(2026, 11, 12, 18, tzinfo=zone).utcoffset() is not None
 
-    monkeypatch.delenv("TZ")
-    assert datetime(2026, 11, 12, 18, tzinfo=server_zone()).utcoffset() is not None
+@pytest.mark.parametrize("unset", [None, "", "   ", ":"])
+def test_a_server_without_a_tz_has_no_zone_and_says_so(monkeypatch: pytest.MonkeyPatch, unset: str | None):
+    if unset is None:
+        monkeypatch.delenv("TZ", raising=False)
+    else:
+        monkeypatch.setenv("TZ", unset)
+
+    with pytest.raises(CalendarSyncTimeZoneError) as refused:
+        server_zone()
+    assert "TZ is not set" in str(refused.value)
+    assert "America/Denver" in str(refused.value)
+
+    # and the window, which starts on the server's own day, is not guessed at either
+    with pytest.raises(CalendarSyncTimeZoneError):
+        window_start()
 
 
-def test_the_window_starts_yesterday():
+@pytest.mark.parametrize("invalid", ["Not/A_Zone", "America/Denvr", "MST7MDT,M3.2.0,M11.1.0", "/etc/localtime"])
+def test_a_tz_that_names_no_zone_is_refused_by_name(monkeypatch: pytest.MonkeyPatch, invalid: str):
+    monkeypatch.setenv("TZ", invalid)
+
+    with pytest.raises(CalendarSyncTimeZoneError) as refused:
+        server_zone()
+    assert f"TZ is '{invalid}'" in str(refused.value)
+    assert "not a time zone" in str(refused.value)
+
+    with pytest.raises(CalendarSyncTimeZoneError):
+        window_start()
+
+
+def test_the_window_starts_yesterday(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("TZ", "America/Denver")
+
     assert window_start(date(2026, 11, 10)) == date(2026, 11, 9)
     assert window_start(date(2027, 1, 1)) == date(2026, 12, 31)
 
