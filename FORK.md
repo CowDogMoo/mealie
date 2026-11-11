@@ -178,6 +178,51 @@ later `skip_on_hand` fix ported into `services/household_services/shopping_lists
 ingredient somebody ticks by hand in the add-to-list dialog is added even when it is a staple;
 drop that port when a rebase brings the fix in.
 
+**Google Calendar.** A household can mirror its meal plan onto one Google calendar, so dinner is
+where people already look and nobody has to open Mealie's planner to see it. It runs one way:
+Mealie's plan stays the truth -- the planner, Home Assistant and the votes all read it -- and
+nothing is ever read back from Google. It is a push through the Calendar API and not an ICS feed
+for two reasons that are about this household: the instance is reachable only on the LAN, so
+Google could not fetch a feed, and a dinner is swapped minutes after a thumbs-down, which a feed
+polled twice a day would show wrong. The credential is server-wide, in a new setting,
+`GOOGLE_CALENDAR_CREDENTIALS`: the JSON of a service-account key or of an authorized-user
+credential, traded for access tokens with `httpx` and `PyJWT`
+(`mealie/services/google_calendar/credentials.py`); no Google client library was added. Which
+calendar, and whether the mirror is on, is one row per household in `household_calendar_sync`
+(revision `a7e2d4f9c6b3`), set on `/household/google-calendar` through `GET` and
+`PUT /api/households/calendar-sync`. Turning it on is refused unless the calendar can be opened and
+written to there and then, and the refusal names the service account's address, which is what the
+household shares its calendar with ("Make changes to events"). **A sync is a reconcile, not a push
+of one change** (`mealie/services/household_services/calendar_sync.py`): read the plan from
+yesterday onward, list the calendar's events that carry this household's private extended property
+(`mealieHousehold`, with `mealieEntry` naming the plan entry), then add what is missing, patch what
+differs, and delete what has no entry or is a second copy of one. An event without the household's
+property is never touched, and events before yesterday are left as a record of what was eaten. No
+event id is stored in Mealie, so there is nothing to drift. Three things set a sync off: the meal
+plan's own `mealplan_entry_*` events on the event bus (a new listener, run as a background task
+after the response, so a Google failure can neither fail nor slow a plan change);
+`POST /api/households/calendar-sync/sync`, the page's "Sync now"; and an hourly scheduler task,
+which heals whatever those missed, including changes nothing announces, like a recipe being
+renamed. Syncs are serialized per household and coalesced, in this process only, because the
+planner replaces a week in a burst of fourteen writes; the duplicate removal is what puts things
+right if two processes ever overlap. The latest failure is kept on the row (`last_error`), shown
+on the page, and cleared by the next sync that works. The upstream edits are the setting in
+`core/settings/settings.py`, one line in `EventBusService._get_listeners`, the task's registration
+in `app.py`, the new datetime column's name in the backup exporter, and the usual model,
+repository, router and client registrations.
+
+Turning it on is three steps, and only the first needs whoever runs the server:
+
+1. Set `GOOGLE_CALENDAR_CREDENTIALS` to the whole JSON of a service-account key file (the one
+   Google Cloud downloads: `type`, `client_email`, `private_key`, `token_uri`, ...) and restart.
+   The Google Cloud project behind the key needs the Calendar API enabled. Any file named
+   `GOOGLE_CALENDAR_CREDENTIALS` under `/run/secrets` is read the same way. The value is masked in
+   the settings dump at startup, and no route returns it.
+2. In Google Calendar, share the calendar with the key's `client_email` -- the page shows it, with
+   a copy button -- and choose "Make changes to events".
+3. On `/household/google-calendar`, paste the calendar's id (Settings > Integrate calendar), switch
+   the mirror on, save, and press "Sync now" to fill the calendar straight away.
+
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
 already reads ≤2 as a dislike and ≥4 as a like, so nothing downstream had to change on day
@@ -186,6 +231,8 @@ one. The feedback row is the record; the star is a projection of it.
 ## Conflict surface
 
 ```
+mealie/app.py
+mealie/core/settings/settings.py
 mealie/db/models/group/group.py
 mealie/db/models/household/__init__.py
 mealie/db/models/household/household.py
@@ -197,6 +244,8 @@ mealie/repos/repository_factory.py
 mealie/routes/users/__init__.py
 mealie/routes/households/__init__.py
 mealie/routes/unit_and_foods/foods.py
+mealie/services/backups_v2/alchemy_exporter.py
+mealie/services/event_bus_service/event_bus_service.py
 mealie/services/household_services/shopping_lists.py
 mealie/schema/household/__init__.py
 mealie/schema/recipe/__init__.py
@@ -243,6 +292,16 @@ The three shopping-list entries come from **cart requests** (below): a `set_extr
 `repository_shopping_list.py`, two methods and a route on the shopping list API client, and the
 `<ShoppingListCartButton>` line on the list page. The rest of that feature is new files.
 
+Four entries come from **Google Calendar**, and each is a line or two: the
+`GOOGLE_CALENDAR_CREDENTIALS` field at the end of `AppSettings` in `core/settings/settings.py`, the
+`CalendarSyncEventListener` import and list entry in `event_bus_service.py`, the
+`sync_google_calendars` import and `register_hourly` entry in `app.py`, and `last_synced_at` in
+`AlchemyExporter.look_for_datetime`. That last one is not optional: a restore rebuilds datetimes by
+column name, so a datetime column missing from that set comes back from a backup as a string
+(upstream's `test_every_datetime_column_survives_a_backup` fails until it is added). The task is
+imported straight from its own module so that `services/scheduler/tasks/__init__.py` stays
+upstream's.
+
 The prose in this section walks through the scoped-feedback edits specifically. Features shipped
 after `v3.24.0-woe.5` — the recipe source list, the "find me a new one" die, cart requests — have
 their files in the block above but are not all described here; the block is what a rebase needs.
@@ -287,8 +346,18 @@ base, not §7.
 
 - Base: `mealie-next` at `14e66291` (`v3.24.0-41`), rebased 2026-08-31.
 - Upstream head at that commit: `69e942bab3aa` (the `tokens_valid_after` migration).
-- Our revision: `b7d3a1f0c2e4`, `down_revision = "69e942bab3aa"`, one `CREATE TABLE` for
-  `user_recipe_feedback`.
+- Our first revision: `b7d3a1f0c2e4`, `down_revision = "69e942bab3aa"`, one `CREATE TABLE` for
+  `user_recipe_feedback`. It is the one that hangs off upstream, and so the one a rebase re-points.
+- Our revisions since, each hanging off the one before: `c3f7a91e5d20` (backfill
+  `tokens_valid_after`), `d4a8b2c6e9f1` (`household_recipe_sources`), `e5b9c3d7a248` (recipe
+  `total_minutes`), `f6c1d8e3b597` (`household_recipe_requests`) and `a7e2d4f9c6b3`
+  (`household_calendar_sync`).
+- **The fork's head is `a7e2d4f9c6b3`.** A new fork migration sets its `down_revision` to that and
+  becomes the head; update this line in the same commit.
+- A database is stamped with the head, not with our first revision. Where **Rollback trap** below
+  says the pod fails on `b7d3a1f0c2e4`, read the head. The same trap sits between two fork images:
+  going back to an image built before a fork migration needs `alembic downgrade` to that image's
+  head first -- `f6c1d8e3b597` for the last image without the calendar table.
 - **There must always be exactly one head.** `mealie/db/init_db.py` calls
   `command.upgrade(cfg, "head")` on every boot; with two heads that is ambiguous and the
   container never comes up.
@@ -299,7 +368,7 @@ Check it with:
 PRODUCTION=false uv run alembic --config mealie/alembic/alembic.ini heads
 ```
 
-Expected output: a single line, `b7d3a1f0c2e4 (head)` (on an untouched upstream checkout it
+Expected output: a single line, `a7e2d4f9c6b3 (head)` (on an untouched upstream checkout it
 prints `69e942bab3aa (head)` instead). A `Secrets directory '/run/secrets' does not exist`
 warning above it is normal on a laptop. The `PRODUCTION=false` is not decoration — without it
 Mealie's settings resolve the data directory to `/app/data`, and the command dies with
@@ -365,15 +434,16 @@ The fork's cost is paid at every upstream bump. Keep it mechanical and it stays 
    generated files, take upstream wholesale and let step 5 regenerate them.
 3. Re-point our migration's `down_revision` to the new upstream head. Immediately after the
    rebase, `PRODUCTION=false uv run alembic --config mealie/alembic/alembic.ini heads` will
-   print *two* revisions: ours (`b7d3a1f0c2e4`) and the new upstream head, because upstream
-   added migrations on top of the old one and ours still hangs off the previous head. The one
-   that is not ours is the new head. Edit `down_revision` in
-   `mealie/alembic/versions/*b7d3a1f0c2e4*.py` to that value. Our own revision id never
-   changes — the database is already stamped with it. Update the rollback target in the
-   **Rollback trap** section below to the same value in the same commit; a stale downgrade
-   target in this file is the thing that bites at 2am.
+   print *two* revisions: the fork's head (`a7e2d4f9c6b3`) and the new upstream head, because
+   upstream added migrations on top of the old one and our chain still hangs off the previous
+   head. The one that is not ours is the new head. Edit `down_revision` in
+   `mealie/alembic/versions/*b7d3a1f0c2e4*.py` -- our first revision, the only one that points
+   at upstream -- to that value. Our own revision ids never change — the database is already
+   stamped with them. Update the rollback target in the **Rollback trap** section below to the
+   same value in the same commit; a stale downgrade target in this file is the thing that bites
+   at 2am.
 4. Re-run the same `heads` command and confirm it now returns exactly one revision,
-   `b7d3a1f0c2e4 (head)`. Two heads means step 3 did not take, and the container will not
+   `a7e2d4f9c6b3 (head)`. Two heads means step 3 did not take, and the container will not
    start.
 5. Re-run `task dev:generate`. **This needs `json2ts` on PATH** — install
    `json-schema-to-typescript@13.1.2` globally (`npm install -g json-schema-to-typescript@13.1.2`);

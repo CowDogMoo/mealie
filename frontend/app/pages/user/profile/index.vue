@@ -237,6 +237,21 @@
             {{ $t('profile.pantry-description') }}
           </UserProfileLinkCard>
         </v-col>
+        <v-col
+          cols="12"
+          sm="12"
+          md="6"
+        >
+          <UserProfileLinkCard
+            :link="{ text: $t('profile.manage-google-calendar'), to: `/household/google-calendar` }"
+            image="/svgs/manage-tasks.svg"
+          >
+            <template #title>
+              {{ $t('calendar-sync.title') }}
+            </template>
+            {{ $t('profile.google-calendar-description') }}
+          </UserProfileLinkCard>
+        </v-col>
         <AdvancedOnly>
           <v-col
             cols="12"

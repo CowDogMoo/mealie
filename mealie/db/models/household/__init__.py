@@ -1,3 +1,4 @@
+from .calendar_sync import HouseholdCalendarSyncModel
 from .cookbook import CookBook
 from .events import GroupEventNotifierModel, GroupEventNotifierOptionsModel
 from .household import Household
@@ -26,6 +27,7 @@ __all__ = [
     "GroupMealPlan",
     "GroupMealPlanRules",
     "Household",
+    "HouseholdCalendarSyncModel",
     "HouseholdPreferencesModel",
     "HouseholdToRecipe",
     "GroupRecipeAction",

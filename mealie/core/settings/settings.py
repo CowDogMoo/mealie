@@ -505,6 +505,12 @@ class AppSettings(AppLoggingSettings):
     YTDLP_COOKIEFILE: str | None = None
     """Path to a cookies file for yt_dlp (used for video transcription scraping)"""
 
+    # ===============================================
+    # Google Calendar sync (fork; see FORK.md)
+    GOOGLE_CALENDAR_CREDENTIALS: MaskedNoneString = None
+    """The JSON of a Google service-account key, or of an authorized-user credential, as one string.
+    When set, a household can mirror its meal plan to a Google calendar. Unset disables it."""
+
 
 def app_settings_constructor(data_dir: Path, production: bool, env_file: Path, env_encoding="utf-8") -> AppSettings:
     """
