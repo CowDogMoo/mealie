@@ -39,6 +39,12 @@
       >
         {{ $t("feedback.find-new") }}
       </v-chip>
+      <v-chip
+        value="dismiss"
+        :prepend-icon="$globals.icons.close"
+      >
+        {{ $t("feedback.dismissed-filter") }}
+      </v-chip>
       <v-chip value="all">
         {{ $t("feedback.all-votes") }}
       </v-chip>
@@ -121,10 +127,14 @@
 import { useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
 import { useUserSelfFeedback } from "~/composables/use-users";
-import { latestFeedbackByRecipe, latestRefillByRecipe } from "~/composables/use-users/feedback-log";
+import {
+  latestDismissByRecipe,
+  latestFeedbackByRecipe,
+  latestRefillByRecipe,
+} from "~/composables/use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
-type VoteFilter = "down" | "up" | "refill" | "all";
+type VoteFilter = "down" | "up" | "refill" | "dismiss" | "all";
 
 interface FeedbackRow extends UserFeedbackOut {
   recipeName: string;
@@ -187,13 +197,15 @@ function castAt(event: UserFeedbackOut): number {
   return event.createdAt ? Date.parse(event.createdAt) : 0;
 }
 
-// the current answer per recipe, plus the newest "find me a new one" request per recipe, newest
-// first. A request is listed beside the opinion rather than instead of it: asking for something
-// new like a dish does not change what you said about the dish.
+// the current answer per recipe, plus the newest "find me a new one" request and the newest "x"
+// per recipe, newest first. Each is listed beside the opinion rather than instead of it: asking
+// for something new like a dish, or taking it off your list, does not change what you said about
+// the dish -- and each needs its own row to be undone from.
 const latest = computed(() => {
   const events = [
     ...latestFeedbackByRecipe(userFeedback.value).values(),
     ...latestRefillByRecipe(userFeedback.value).values(),
+    ...latestDismissByRecipe(userFeedback.value).values(),
   ];
   return events.sort((a, b) => castAt(b) - castAt(a));
 });
@@ -246,6 +258,9 @@ function voteIcon(vote: string) {
   if (vote === "refill") {
     return $globals.icons.diceMultiple;
   }
+  if (vote === "dismiss") {
+    return $globals.icons.close;
+  }
   return $globals.icons.minus;
 }
 
@@ -271,6 +286,9 @@ function voteLabel(vote: string) {
   }
   if (vote === "refill") {
     return i18n.t("feedback.find-new");
+  }
+  if (vote === "dismiss") {
+    return i18n.t("feedback.dismissed-filter");
   }
   return i18n.t("feedback.neutral");
 }

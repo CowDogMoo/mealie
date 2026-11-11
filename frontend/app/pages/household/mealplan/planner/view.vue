@@ -120,10 +120,10 @@ const isToday = (date: Date) => {
 
 /*
   These cards pass show-feedback (as the browse grids do via RecipeCardSection), so they carry
-  two more buttons. From `sm` up the card also shows the star strip, and favourite + stars +
-  thumbs + menu need a card of ~395px; a 340px one clips the "..." menu by 43px. Below `sm` the
-  card hides the read-only stars instead, which the row can afford to lose, so the 340px floor
-  above still holds there.
+  four more buttons: both thumbs, the die and the x. From `sm` up the card also shows the star
+  strip, and favourite + stars + those four + menu need a card of ~411px; a 340px one would push
+  the "..." menu onto a second line. Below `sm` the card hides the read-only stars instead, which
+  the row can afford to lose, so the 340px floor above still holds there.
 */
 @media (min-width: 600px) {
   .col-borders {

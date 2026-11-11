@@ -15,9 +15,10 @@ interface FeedbackEvent {
 const isOwnGroup = ref(true);
 const selfFeedback = ref<FeedbackEvent[]>([]);
 
-const { setFeedback, deleteFeedback, alertError } = vi.hoisted(() => ({
+const { setFeedback, deleteFeedback, alertSuccess, alertError } = vi.hoisted(() => ({
   setFeedback: vi.fn(),
   deleteFeedback: vi.fn(),
+  alertSuccess: vi.fn(),
   alertError: vi.fn(),
 }));
 
@@ -36,7 +37,7 @@ vi.mock("~/composables/use-users", () => ({
 }));
 
 vi.mock("~/composables/use-toast", () => ({
-  alert: { success: vi.fn(), error: alertError },
+  alert: { success: alertSuccess, error: alertError },
 }));
 
 // The reason dialog is a page of its own; here it only has to say whether it was opened.
@@ -72,6 +73,7 @@ const feedback = enUS.feedback;
 const THUMBS_UP = `[aria-label="${feedback["thumbs-up"]}"]`;
 const THUMBS_DOWN = `[aria-label="${feedback["thumbs-down"]}"]`;
 const FIND_NEW = "[data-test=\"find-new\"]";
+const DISMISS = "[data-test=\"dismiss\"]";
 
 function event(vote: string, id = `${vote}-event`, createdAt = "2026-09-01T00:00:00"): FeedbackEvent {
   return { id, recipeId: "recipe-uuid", vote, createdAt };
@@ -103,9 +105,10 @@ describe("taking a vote back from the thumbs", () => {
     isOwnGroup.value = true;
     selfFeedback.value = [];
     setFeedback.mockReset();
-    setFeedback.mockResolvedValue(undefined);
+    setFeedback.mockResolvedValue({ response: { status: 201 } });
     deleteFeedback.mockReset();
     deleteFeedback.mockResolvedValue({ response: { status: 200 } });
+    alertSuccess.mockReset();
     alertError.mockReset();
   });
 
@@ -193,5 +196,77 @@ describe("taking a vote back from the thumbs", () => {
 
     expect(setFeedback).toHaveBeenCalledWith("chicken-thighs-with-fennel", { vote: "refill" });
     expect(deleteFeedback).not.toHaveBeenCalled();
+  });
+});
+
+describe("the x on a card that stays on screen", () => {
+  beforeEach(() => {
+    isOwnGroup.value = true;
+    selfFeedback.value = [];
+    setFeedback.mockReset();
+    setFeedback.mockResolvedValue({ response: { status: 201 } });
+    deleteFeedback.mockReset();
+    alertSuccess.mockReset();
+    alertError.mockReset();
+  });
+
+  test("every press is sent: whether the recipe is already removed is the server's to say", async () => {
+    const wrapper = mountButtons();
+
+    await wrapper.find(DISMISS).trigger("click");
+    await flushPromises();
+
+    // this tab's copy of the log now shows the removal, and the card is still on screen
+    selfFeedback.value = [event("dismiss", "dismiss-event", new Date().toISOString())];
+
+    await wrapper.find(DISMISS).trigger("click");
+    await flushPromises();
+
+    expect(setFeedback).toHaveBeenCalledTimes(2);
+    expect(setFeedback).toHaveBeenLastCalledWith("chicken-thighs-with-fennel", { vote: "dismiss" });
+    expect(alertSuccess).toHaveBeenCalledTimes(2);
+    expect(alertSuccess).toHaveBeenLastCalledWith(feedback["dismissed"]);
+    expect(alertError).not.toHaveBeenCalled();
+  });
+
+  test("a log that still shows a removal undone elsewhere does not stand in for the request", async () => {
+    selfFeedback.value = [event("dismiss", "undone-on-another-device", "2026-09-01T00:00:00")];
+    setFeedback.mockResolvedValue({ response: null, error: new Error("Network Error"), data: null });
+    const wrapper = mountButtons();
+
+    await wrapper.find(DISMISS).trigger("click");
+    await flushPromises();
+
+    expect(setFeedback).toHaveBeenCalledTimes(1);
+    expect(setFeedback).toHaveBeenCalledWith("chicken-thighs-with-fennel", { vote: "dismiss" });
+    expect(alertSuccess).not.toHaveBeenCalled();
+    expect(alertError).toHaveBeenCalledWith(feedback["save-failed"]);
+  });
+
+  test.each([
+    ["the x", DISMISS, "dismiss"],
+    ["the die", FIND_NEW, "refill"],
+  ])("%s says so, and confirms nothing, when the request does not go through", async (_name, button, vote) => {
+    setFeedback.mockResolvedValue({ response: null, error: new Error("Network Error"), data: null });
+    const wrapper = mountButtons();
+
+    await wrapper.find(button).trigger("click");
+    await flushPromises();
+
+    expect(setFeedback).toHaveBeenCalledWith("chicken-thighs-with-fennel", { vote });
+    expect(alertSuccess).not.toHaveBeenCalled();
+    expect(alertError).toHaveBeenCalledTimes(1);
+    expect(alertError).toHaveBeenCalledWith(feedback["save-failed"]);
+  });
+
+  test("a rejected request is not confirmed either", async () => {
+    setFeedback.mockResolvedValue({ response: { status: 403 }, error: null, data: null });
+    const wrapper = mountButtons();
+
+    await wrapper.find(DISMISS).trigger("click");
+    await flushPromises();
+
+    expect(alertSuccess).not.toHaveBeenCalled();
+    expect(alertError).toHaveBeenCalledWith(feedback["save-failed"]);
   });
 });

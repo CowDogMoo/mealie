@@ -105,8 +105,9 @@ search, and organizer pages), with a reason dialog. New components
 (`RecipeFeedbackButtons.vue`, `RecipeFeedbackDialog.vue`); existing components gain one prop,
 `show-feedback`, default `false`, so the change is opt-in and inert everywhere a caller does
 not switch it on. A thumbs-down also takes the recipe out of the voter's own browse grids:
-`RecipeCardSection.vue` filters, per viewer and on the client, every recipe whose current vote
-is `down`, and shows a "N not for me" chip in its toolbar that toggles them back into view. The
+`RecipeCardSection.vue` filters, per viewer and on the client, every recipe whose newest event
+from that viewer hides it (`hiddenRecipeIds` in `frontend/app/composables/use-users/feedback-log.ts`
+is the rule), and shows a "N hidden" chip in its toolbar that toggles them back into view. The
 recipe itself is untouched — a housemate still sees it — and the vote is undone from the My
 Recipe Feedback page (`/user/profile/feedback`), which also re-projects the star the vote wrote.
 
@@ -142,6 +143,20 @@ statuses and the note limit; `frontend/app/composables/use-recipe-requests.ts` h
 TypeScript copy, with a test that fails if the two drift. The upstream edits are a
 `below-toolbar` slot in `RecipeCardSection.vue`, the bar in that slot on
 `RecipeExplorerPage.vue`, and the usual model, repository, router and client registrations.
+
+**An x.** Beside the thumbs and the die, every card carries an "x": take this recipe off my list
+without saying anything about it. It posts a `dismiss` event (`DISMISS_VOTE` in
+`mealie/schema/user/user_feedback.py`) through the same `POST /api/users/{id}/feedback/{slug}`
+as a vote. It asks for no reason, writes no star and moves no thumb; the recipe leaves the
+presser's own grids the way a thumbs-down does, My Recipe Feedback lists it under "Removed" where
+it can be undone, and the planner skill reads it from the household feed and stops suggesting the
+recipe. A card can stay on screen after its x (a planned night, or the grid with hidden recipes
+shown), so the x can be pressed again: the route stores nothing for a `dismiss` whose caller's
+newest event on that recipe is already a `dismiss` and answers with that one, and undoing a
+`dismiss` deletes every `dismiss` that person has on the recipe, so one undo is all it takes to
+bring the recipe back. **The planner must know the vote before the fork ships it**: `history.mjs`
+throws on a vote it has never heard of, so a `dismiss` event reaching an old runner fails every
+sync tick. Deploy the runner first.
 
 **Pantry staples.** A household marks the foods it usually has -- salt, sugar, olive oil -- and
 recipes leave them off the shopping list. There is no new storage: a staple is upstream's

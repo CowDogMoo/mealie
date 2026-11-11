@@ -365,7 +365,7 @@ def test_unknown_vote_is_422(
 
     assert own_feedback(api_client, author) == []
 
-    for vote in ("up", "down", "neutral", "refill"):
+    for vote in ("up", "down", "neutral", "refill", "dismiss"):
         payload = {"vote": vote, "reason": "too-heavy"} if vote == "down" else {"vote": vote}
         response = api_client.post(url, json=payload, headers=author.token)
         assert response.status_code == 201, f"{vote!r} should be an accepted vote"
@@ -847,6 +847,38 @@ def test_undoing_a_vote_leaves_a_star_set_by_hand_alone(
     assert self_rating(api_client, caster, recipe)["rating"] == 3
 
 
+@pytest.mark.parametrize("vote", ["neutral", "refill", "dismiss"])
+def test_undoing_an_event_that_wrote_no_star_leaves_a_star_set_by_hand_alone(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory, vote: str
+):
+    """Only a thumb writes a star, so only undoing a thumb may move one.
+
+    The up vote underneath still implies five stars, but it is not the event being undone: the
+    three the person chose by hand after it stays their last word.
+    """
+
+    caster = user_tuple[0]
+    recipe = recipe_factory(caster)
+
+    post_feedback(api_client, caster, recipe, vote="up")
+    response = api_client.post(
+        api_routes.users_id_ratings_slug(caster.user_id, recipe.slug),
+        json=UserRatingUpdate(rating=3).model_dump(),
+        headers=caster.token,
+    )
+    assert response.status_code == 200
+
+    separate_events()
+    event = post_feedback(api_client, caster, recipe, vote=vote)
+    assert self_rating(api_client, caster, recipe)["rating"] == 3
+
+    response = api_client.delete(
+        api_routes.users_id_feedback_event_id(caster.user_id, event["id"]), headers=caster.token
+    )
+    assert response.status_code == 200
+    assert self_rating(api_client, caster, recipe)["rating"] == 3
+
+
 def test_votes_set_the_caster_rating_only(
     api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
 ):
@@ -899,6 +931,223 @@ def test_neutral_vote_leaves_the_caster_rating_untouched(
     # nor does it invent a star where there was none
     post_feedback(api_client, caster, unrated, vote="neutral")
     assert self_rating(api_client, caster, unrated) is None
+
+
+def test_dismiss_takes_a_recipe_off_the_list_without_an_opinion(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """The "x" on a card: no reason asked for, no star written or moved, and undoable.
+
+    It is in the log so the planner can read it from the household feed and stop suggesting the
+    recipe, and so the same undo route that takes back a vote brings the recipe back.
+    """
+
+    caster, housemate = user_tuple
+    liked = recipe_factory(caster)
+    unrated = recipe_factory(caster)
+
+    post_feedback(api_client, caster, liked, vote="up")
+    assert self_rating(api_client, caster, liked)["rating"] == 5
+
+    # nothing but the vote is needed: the whole point is not having to say why
+    event = post_feedback(api_client, caster, liked, vote="dismiss")
+    assert event["vote"] == "dismiss"
+    assert event["reason"] is None
+    assert event["scope"] == "recipe"
+    assert event["advisory"] is False
+
+    # the star the up vote wrote is untouched, and none is invented where there was none
+    assert self_rating(api_client, caster, liked)["rating"] == 5
+    post_feedback(api_client, caster, unrated, vote="dismiss")
+    assert self_rating(api_client, caster, unrated) is None
+    assert self_rating(api_client, housemate, unrated) is None
+
+    # the household feed carries it, and the vote filter picks it out for the planner
+    removed = household_feedback(api_client, housemate, vote="dismiss")
+    assert {row["recipeId"] for row in removed} == {str(liked.id), str(unrated.id)}
+    assert all(row["username"] == caster.username for row in removed)
+    assert household_feedback(api_client, housemate, vote="refill") == []
+
+    # undoing it leaves the star exactly where the up vote put it
+    response = api_client.delete(
+        api_routes.users_id_feedback_event_id(caster.user_id, event["id"]), headers=caster.token
+    )
+    assert response.status_code == 200, response.text
+    assert self_rating(api_client, caster, liked)["rating"] == 5
+    assert {row["recipeId"] for row in household_feedback(api_client, housemate, vote="dismiss")} == {str(unrated.id)}
+
+
+def own_dismissals(api_client: TestClient, user: TestUser, recipe: Recipe) -> list[dict]:
+    """The removals this user's log holds for one recipe, oldest first."""
+
+    return [
+        event
+        for event in own_feedback(api_client, user)
+        if event["recipeId"] == str(recipe.id) and event["vote"] == "dismiss"
+    ]
+
+
+def undo_feedback(api_client: TestClient, user: TestUser, event: dict) -> None:
+    response = api_client.delete(api_routes.users_id_feedback_event_id(user.user_id, event["id"]), headers=user.token)
+    assert response.status_code == 200, response.text
+
+
+def test_pressing_the_x_twice_stores_one_dismiss_so_one_undo_brings_the_recipe_back(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """A second "x" says nothing the first did not, whatever the client believed when it sent it.
+
+    The card of a planned recipe stays on screen after its x, and a second tab or a tab whose
+    refresh failed does not know the recipe is already removed, so the repeat reaches the server.
+    It is answered with the removal already in the log rather than a second row, because a second
+    row would still hide the recipe after the one undo My Recipe Feedback offers.
+    """
+
+    caster, housemate = user_tuple
+    recipe = recipe_factory(caster)
+
+    first = post_feedback(api_client, caster, recipe, vote="dismiss")
+    separate_events()
+    second = post_feedback(api_client, caster, recipe, vote="dismiss")
+
+    assert second["id"] == first["id"]
+    assert second["createdAt"] == first["createdAt"]
+    assert [event["id"] for event in own_dismissals(api_client, caster, recipe)] == [first["id"]]
+    assert len(household_feedback(api_client, housemate, vote="dismiss", recipeId=str(recipe.id))) == 1
+
+    undo_feedback(api_client, caster, second)
+
+    assert own_dismissals(api_client, caster, recipe) == []
+    assert household_feedback(api_client, housemate, vote="dismiss", recipeId=str(recipe.id)) == []
+
+
+def test_a_dismiss_after_its_undo_is_a_new_removal(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """Undoing an x really takes it back: the next x is a fresh event, not the old one revived."""
+
+    caster = user_tuple[0]
+    recipe = recipe_factory(caster)
+
+    first = post_feedback(api_client, caster, recipe, vote="dismiss")
+    undo_feedback(api_client, caster, first)
+    separate_events()
+    again = post_feedback(api_client, caster, recipe, vote="dismiss")
+
+    assert again["id"] != first["id"]
+    assert [event["id"] for event in own_dismissals(api_client, caster, recipe)] == [again["id"]]
+
+
+@pytest.mark.parametrize(
+    "between",
+    [{"vote": "up"}, {"vote": "down", "reason": "too-heavy"}],
+    ids=["thumbs-up", "thumbs-down"],
+)
+def test_a_thumb_between_two_dismisses_lets_the_second_one_be_recorded(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory, between: dict
+):
+    """Only a dismiss directly on top of a dismiss is a repeat.
+
+    A vote cast after the first x is the newest thing this person said about the recipe, so the
+    x that follows it says something new and is stored as its own event.
+    """
+
+    caster = user_tuple[0]
+    recipe = recipe_factory(caster)
+
+    first = post_feedback(api_client, caster, recipe, vote="dismiss")
+    separate_events()
+    post_feedback(api_client, caster, recipe, **between)
+    separate_events()
+    second = post_feedback(api_client, caster, recipe, vote="dismiss")
+
+    assert second["id"] != first["id"]
+    assert [event["id"] for event in own_dismissals(api_client, caster, recipe)] == [first["id"], second["id"]]
+    assert own_feedback(api_client, caster)[-1]["id"] == second["id"]
+
+
+def test_one_undo_brings_the_recipe_back_whatever_was_voted_between_two_dismisses(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """x, thumbs up, x, un-thumb, one undo: no removal is left behind.
+
+    The thumb between the two presses is what let the second x be stored, and taking the thumb
+    back leaves the two removals back to back. My Recipe Feedback shows one "Removed" row for
+    them, so its one undo has to clear both, or the row would come straight back and the recipe
+    would stay hidden.
+    """
+
+    caster, housemate = user_tuple
+    recipe = recipe_factory(caster)
+
+    post_feedback(api_client, caster, recipe, vote="dismiss")
+    separate_events()
+    thumb = post_feedback(api_client, caster, recipe, vote="up")
+    separate_events()
+    newest = post_feedback(api_client, caster, recipe, vote="dismiss")
+    undo_feedback(api_client, caster, thumb)
+    assert len(own_dismissals(api_client, caster, recipe)) == 2
+
+    undo_feedback(api_client, caster, newest)
+
+    assert own_dismissals(api_client, caster, recipe) == []
+    assert household_feedback(api_client, housemate, vote="dismiss", recipeId=str(recipe.id)) == []
+    # nothing this person said about the recipe is left, so nothing is left to hide it
+    assert [event for event in own_feedback(api_client, caster) if event["recipeId"] == str(recipe.id)] == []
+
+
+@pytest.mark.parametrize("undone", [0, -1], ids=["the-older-dismiss", "the-newer-dismiss"])
+def test_undoing_a_dismiss_takes_only_that_persons_dismisses_on_that_recipe(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory, undone: int
+):
+    """Whichever of the removals is undone, both go -- and nothing else in anybody's log does."""
+
+    caster, housemate = user_tuple
+    recipe = recipe_factory(caster)
+    other = recipe_factory(caster)
+
+    post_feedback(api_client, caster, recipe, vote="dismiss")
+    separate_events()
+    thumb = post_feedback(api_client, caster, recipe, vote="up")
+    separate_events()
+    post_feedback(api_client, caster, recipe, vote="dismiss")
+    elsewhere = post_feedback(api_client, caster, other, vote="dismiss")
+    theirs = post_feedback(api_client, housemate, recipe, vote="dismiss")
+
+    mine = own_dismissals(api_client, caster, recipe)
+    assert len(mine) == 2
+
+    undo_feedback(api_client, caster, mine[undone])
+
+    assert own_dismissals(api_client, caster, recipe) == []
+    # the thumb between them still stands, and is now the newest thing said: the recipe is back
+    remaining = [event for event in own_feedback(api_client, caster) if event["recipeId"] == str(recipe.id)]
+    assert [event["id"] for event in remaining] == [thumb["id"]]
+    assert self_rating(api_client, caster, recipe)["rating"] == 5
+
+    assert [event["id"] for event in own_dismissals(api_client, caster, other)] == [elsewhere["id"]]
+    assert [event["id"] for event in own_dismissals(api_client, housemate, recipe)] == [theirs["id"]]
+
+
+def test_a_repeat_dismiss_is_per_person_and_per_recipe(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """Somebody else's x, or this person's x on another recipe, is not a repeat of this one."""
+
+    caster, housemate = user_tuple
+    recipe = recipe_factory(caster)
+    other = recipe_factory(caster)
+
+    mine = post_feedback(api_client, caster, recipe, vote="dismiss")
+    separate_events()
+    theirs = post_feedback(api_client, housemate, recipe, vote="dismiss")
+    elsewhere = post_feedback(api_client, caster, other, vote="dismiss")
+
+    assert len({mine["id"], theirs["id"], elsewhere["id"]}) == 3
+    assert theirs["userId"] == str(housemate.user_id)
+    assert [event["id"] for event in own_dismissals(api_client, caster, recipe)] == [mine["id"]]
+    assert [event["id"] for event in own_dismissals(api_client, housemate, recipe)] == [theirs["id"]]
+    assert [event["id"] for event in own_dismissals(api_client, caster, other)] == [elsewhere["id"]]
 
 
 def test_refill_request_is_logged_but_changes_no_opinion(

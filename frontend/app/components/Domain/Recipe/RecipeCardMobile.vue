@@ -83,7 +83,10 @@
             </div>
           </div>
           <slot name="actions">
-            <v-card-actions class="w-100 my-0 px-1 py-0">
+            <v-card-actions
+              class="w-100 my-0 px-1 py-0"
+              :class="{ 'recipe-feedback-row': showFeedbackControls }"
+            >
               <RecipeFavoriteBadge
                 v-if="isOwnGroup && showRecipeContent"
                 :recipe-id="recipeId"
@@ -93,10 +96,11 @@
               <div v-else class="my-0 px-1 py-0" /> <!-- Empty div to keep the layout consistent -->
               <!--
                 Measured: on the narrowest card the meal planner draws (340px, 125px of it thumbnail)
-                this row has 207px, and the favourite, two thumbs and the menu take 184px of it. The
-                94px star strip cannot also fit, so where feedback is on the read-only stars step
-                aside on phone-width cards and come back from `sm` up, where the row has 287px and
-                the compact thumbs leave 25px spare. Callers that don't opt in keep today's row.
+                this row has 207px. With feedback on it holds six controls -- the favourite, both
+                thumbs, the die, the x and the menu -- which `recipe-feedback-row` packs into 192px.
+                The 86px star strip cannot also fit, so the read-only stars step aside on phone-width
+                cards and come back from `sm` up, where the planner's 420px card gives the row 287px
+                and all seven take 278px. Callers that don't opt in keep today's row.
               -->
               <RecipeCardRating
                 v-if="showRecipeContent"
@@ -109,7 +113,7 @@
                 v-if="showFeedbackControls"
                 :recipe-id="recipeId"
                 :slug="slug"
-                :small="smAndUp"
+                small
               />
 
               <!-- If we're not logged-in, no items display, so we hide this menu -->
@@ -143,7 +147,6 @@
 </template>
 
 <script setup lang="ts">
-import { useDisplay } from "vuetify";
 import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
@@ -199,20 +202,16 @@ const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
 // opt-in, and only under the same conditions that already gate the favourite badge and the
 // context menu: a logged-out or cross-group viewer has nothing to vote with
 const showFeedbackControls = computed(() => props.showFeedback && isOwnGroup.value && !!showRecipeContent.value);
-
-// same breakpoint the stars use below: on a phone-width card they are hidden, which leaves room
-// for thumbs the size of the heart beside them; from `sm` up the stars are back and the thumbs
-// take the compact size so all four controls still fit on one row
-const { smAndUp } = useDisplay();
 </script>
 
 <style scoped>
 /*
-  Below `sm` the action row cannot carry the star strip and the thumbs at once: the narrowest card
-  the planner draws leaves the row 207px, the favourite/thumbs/menu take 184px of it and the strip
-  is another 94px. The stars are display-only, so where the feedback controls are on they give way
-  on phone-width cards. `!important` because the strip's own scoped rule sets `display` too, and
-  Vuetify's `d-none` helper lives in a cascade layer, which loses to any unlayered component style.
+  Below `sm` the action row cannot carry the star strip and the feedback controls at once: the
+  narrowest card the planner draws leaves the row 207px, the six compact controls take 192px of it
+  and the strip is another 86px. The stars are display-only, so where the feedback controls are on
+  they give way on phone-width cards. `!important` because the strip's own scoped rule sets
+  `display` too, and Vuetify's `d-none` helper lives in a cascade layer, which loses to any
+  unlayered component style.
 */
 @media (max-width: 599.98px) {
   .rating-yields-to-feedback {

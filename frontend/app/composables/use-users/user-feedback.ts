@@ -40,10 +40,11 @@ export const useUserSelfFeedback = function () {
     loading.value = true;
     const api = useUserApi();
 
-    await api.users.setFeedback(userId, slug, payload);
+    const result = await api.users.setFeedback(userId, slug, payload);
 
     loading.value = false;
     await refreshUserFeedback();
+    return result;
   }
 
   async function deleteFeedback(eventId: string) {

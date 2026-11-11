@@ -20,7 +20,13 @@ from mealie.routes.users._helpers import assert_user_change_allowed
 from mealie.schema.recipe.recipe import Recipe
 from mealie.schema.response.responses import ErrorResponse
 from mealie.schema.user.user import UserRatingCreate
-from mealie.schema.user.user_feedback import UserFeedbackCreate, UserFeedbackIn, UserFeedbackOut, UserFeedbacks
+from mealie.schema.user.user_feedback import (
+    DISMISS_VOTE,
+    UserFeedbackCreate,
+    UserFeedbackIn,
+    UserFeedbackOut,
+    UserFeedbacks,
+)
 from mealie.services.recipe_sources.service import RecipeSourceService
 
 router = UserAPIRouter()
@@ -29,7 +35,8 @@ VOTE_STAR_RATINGS: dict[str, float] = {"down": 1, "up": 5}
 """PLAN.md D3: a vote also writes the caster's star, since nobody who just pressed thumbs-down
 in the planner is then going to go set stars. ``neutral`` is deliberately absent from this map --
 it records an opinion too mild to be worth overwriting a star the person chose deliberately.
-``refill`` is absent too: it is not an opinion at all, only a request for a new recipe like this one."""
+``refill`` is absent too: it is not an opinion at all, only a request for a new recipe like this one.
+So is ``dismiss``: taking a recipe off your list says nothing about how good it was."""
 
 
 @controller(router)
@@ -97,11 +104,24 @@ class UserFeedbackController(BaseUserController):
 
     @router.post("/{id}/feedback/{slug}", response_model=UserFeedbackOut, status_code=status.HTTP_201_CREATED)
     def create_feedback(self, id: UUID4, slug: str, data: UserFeedbackIn) -> UserFeedbackOut:
-        """Record one feedback event on a recipe, plus the star rating that vote implies."""
+        """Record one feedback event on a recipe, plus the star rating that vote implies.
+
+        A ``dismiss`` on a recipe whose newest event from this person is already a ``dismiss``
+        writes nothing and answers with the removal the log already holds: a second "x" says
+        nothing the first did not. The rule lives here because this log is the only one that is
+        never stale: a browser holds a copy, and a second tab or a failed refresh leaves that copy
+        wrong. It does not keep two removals apart once a vote cast between them is undone;
+        ``delete_feedback`` is what makes one undo enough to bring the recipe back either way.
+        """
 
         assert_user_change_allowed(id, self.user, self.user)
 
         recipe = self.get_recipe_or_404(slug)
+
+        if data.vote == DISMISS_VOTE:
+            mine = self.repos.user_feedback.get_by_users([id], recipe_id=recipe.id)
+            if mine and mine[-1].vote == DISMISS_VOTE:
+                return mine[-1]
 
         # UserFeedbackCreate recomputes `advisory` from the licensing map in its model validator,
         # and the request body has no `advisory`, `user_id` or `recipe_id` field to smuggle one
@@ -165,7 +185,14 @@ class UserFeedbackController(BaseUserController):
         still reads exactly what the undone vote wrote, it is cleared, because the only reason it
         held that value was the vote being undone. A star that has since been set by hand to
         something else is not touched: a rating has no history, so there is nothing safer to put
-        back than what the person last chose.
+        back than what the person last chose. An event that wrote no star in the first place
+        (``neutral``, ``refill``, ``dismiss``) has none to take back, so undoing it leaves the
+        star exactly as it stands.
+
+        Undoing a ``dismiss`` takes every ``dismiss`` this person has on the recipe with it. Two
+        can end up in the log when a vote was cast between them, and undoing that vote leaves them
+        back to back; the page shows one "Removed" row, and its one undo has to bring the recipe
+        back whatever was said in between.
         """
 
         assert_user_change_allowed(id, self.user, self.user)
@@ -178,6 +205,10 @@ class UserFeedbackController(BaseUserController):
             )
 
         deleted = self.repos.user_feedback.delete(event_id)
+        if deleted.vote == DISMISS_VOTE:
+            rest = self.repos.user_feedback.get_by_users([id], recipe_id=deleted.recipe_id, vote=DISMISS_VOTE)
+            self.repos.user_feedback.delete_many([dismissal.id for dismissal in rest])
+
         self.unsync_star_rating(id, deleted)
 
         return deleted
@@ -189,6 +220,10 @@ class UserFeedbackController(BaseUserController):
         rating is cleared with ``0`` rather than ``NULL`` because that is what the recipe page
         writes when a person un-stars by hand, and upstream's aggregate treats both as unrated.
         """
+
+        written = VOTE_STAR_RATINGS.get(undone.vote)
+        if written is None:
+            return
 
         current = self.repos.user_ratings.get_by_user_and_recipe(user_id, undone.recipe_id)
         if current is None:
@@ -202,7 +237,7 @@ class UserFeedbackController(BaseUserController):
 
         if implied is not None:
             new_rating: float = implied
-        elif current.rating == VOTE_STAR_RATINGS.get(undone.vote):
+        elif current.rating == written:
             new_rating = 0
         else:
             return

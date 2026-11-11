@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { hiddenRecipeIds, latestFeedbackByRecipe, latestRefillByRecipe } from "../use-users/feedback-log";
+import {
+  hiddenRecipeIds,
+  latestDismissByRecipe,
+  latestFeedbackByRecipe,
+  latestRefillByRecipe,
+} from "../use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
 function event(overrides: Partial<UserFeedbackOut>): UserFeedbackOut {
@@ -163,5 +168,59 @@ describe("hiddenRecipeIds", () => {
     ]);
 
     expect(hidden.size).toBe(0);
+  });
+});
+
+describe("the x: removing a recipe from your list", () => {
+  test("hides the recipe it was pressed on, with no opinion and no request behind it", () => {
+    const log = [event({ id: "x", recipeId: "a", vote: "dismiss" })];
+
+    expect([...hiddenRecipeIds(log)]).toEqual(["a"]);
+    // not an answer: no thumb lights up for it
+    expect(latestFeedbackByRecipe(log).size).toBe(0);
+    // and not a request: the die must not show "asked for a new one"
+    expect(latestRefillByRecipe(log).size).toBe(0);
+  });
+
+  test("removing a recipe you voted up hides it without changing the answer", () => {
+    const log = [
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "x", recipeId: "a", vote: "dismiss", createdAt: "2026-09-02T00:00:00" }),
+    ];
+
+    expect(hiddenRecipeIds(log).has("a")).toBe(true);
+    expect(latestFeedbackByRecipe(log).get("a")?.id).toBe("up");
+  });
+
+  test("undoing it (it vanishes from the log) brings the recipe back", () => {
+    const hidden = hiddenRecipeIds([
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+    ]);
+
+    expect(hidden.size).toBe(0);
+  });
+
+  test("a later thumbs up lifts it, the same as it lifts a thumbs down", () => {
+    const hidden = hiddenRecipeIds([
+      event({ id: "x", recipeId: "a", vote: "dismiss", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-02T00:00:00" }),
+    ]);
+
+    expect(hidden.size).toBe(0);
+  });
+
+  test("the removal a later vote lifted is still listed, so it can be undone", () => {
+    const log = [
+      event({ id: "x", recipeId: "a", vote: "dismiss", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-02T00:00:00" }),
+      event({ id: "ask", recipeId: "b", vote: "refill", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "x-again", recipeId: "b", vote: "dismiss", createdAt: "2026-09-03T00:00:00" }),
+    ];
+
+    // what hides is the newest event of any kind: the up vote on "a", the x on "b"
+    expect([...hiddenRecipeIds(log)]).toEqual(["b"]);
+
+    expect(latestDismissByRecipe(log).get("a")?.id).toBe("x");
+    expect(latestDismissByRecipe(log).get("b")?.id).toBe("x-again");
   });
 });
