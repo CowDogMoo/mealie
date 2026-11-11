@@ -21,7 +21,7 @@ both mirrors off on the way in and on the way out.
 """
 
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from uuid import uuid4
 
 import httpx
@@ -32,7 +32,12 @@ from mealie.core.config import get_app_settings
 from mealie.schema.household.calendar_sync import CalendarSyncUpdate
 from mealie.services.google_calendar import client as google_client
 from mealie.services.google_calendar import credentials as google_credentials
-from mealie.services.household_services.calendar_sync import CalendarSyncService, household_repos, window_start
+from mealie.services.household_services.calendar_sync import (
+    CalendarSyncService,
+    household_repos,
+    server_zone,
+    window_start,
+)
 from mealie.services.scheduler.tasks.sync_google_calendars import sync_google_calendars
 from tests.utils import api_routes
 from tests.utils.assertion_helpers import assert_deserialize
@@ -57,6 +62,19 @@ DAY = window_start() + timedelta(days=3)
 
 def day(offset: int = 0) -> str:
     return (DAY + timedelta(days=offset)).isoformat()
+
+
+def dinner_time(offset: int = 0) -> tuple[dict, dict]:
+    """The start and end a dinner's event should have: six to eight that evening, server time."""
+
+    zone = server_zone()
+    name = getattr(zone, "key", None)
+
+    def edge(hour: int) -> dict:
+        at = datetime.combine(DAY + timedelta(days=offset), time(hour), tzinfo=zone)
+        return {"dateTime": at.isoformat()} | ({"timeZone": name} if name else {})
+
+    return edge(18), edge(20)
 
 
 def status(api_client: TestClient, user: TestUser) -> dict:
@@ -358,8 +376,7 @@ def test_creating_updating_and_deleting_an_entry_is_mirrored(
     [event] = mirrored.events(CALENDAR)
     assert event["summary"] == f"Dinner: {recipe['name']}"
     assert event["description"] == f"Double it\n\n{link}"
-    assert event["start"] == {"date": day()}
-    assert event["end"] == {"date": day(1)}
+    assert (event["start"], event["end"]) == dinner_time(), "a dinner is on the calendar from six to eight"
     assert event["transparency"] == "transparent"
     assert event["source"] == {"title": recipe["name"], "url": link}
     assert event["extendedProperties"] == {
@@ -408,7 +425,9 @@ def test_a_whole_week_replaced_in_a_burst_ends_up_equal_to_the_plan(
 
     events = mirrored.events(CALENDAR)
     assert sorted(event["summary"] for event in events) == sorted(f"Dinner: new {offset}" for offset in range(7))
-    assert sorted(event["start"]["date"] for event in events) == [day(offset) for offset in range(7)]
+    assert sorted(event["start"]["dateTime"] for event in events) == [
+        dinner_time(offset)[0]["dateTime"] for offset in range(7)
+    ]
 
 
 def test_sync_now_reports_what_changed_and_a_second_sync_changes_nothing(
@@ -453,6 +472,35 @@ def test_a_duplicate_event_for_one_entry_is_removed(
     assert kept["id"] == original["id"], "the older event is the one kept"
     assert kept["id"] != duplicate["id"]
     assert kept["summary"] == "Dinner: Lentil Tacos"
+
+
+def test_a_dinner_written_as_an_all_day_event_becomes_six_to_eight_without_a_second_event(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    lunch = plan(api_client, unique_user, day(), title="Soup", entryType="lunch")
+    by_entry = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in mirrored.events(CALENDAR)}
+    written = by_entry[str(entry["id"])]
+
+    # what a sync from before dinners had an hour left on the calendar
+    mirrored.calendars[CALENDAR][written["id"]] |= {"start": {"date": day()}, "end": {"date": day(1)}}
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    after = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in mirrored.events(CALENDAR)}
+    assert len(mirrored.events(CALENDAR)) == 2, "converted in place: no second event for the dinner"
+    converted = after[str(entry["id"])]
+    assert converted["id"] == written["id"]
+    assert (converted["start"], converted["end"]) == dinner_time()
+    assert converted["transparency"] == "transparent"
+    assert converted["extendedProperties"] == written["extendedProperties"]
+
+    # the lunch is as it always was: all day
+    assert after[str(lunch["id"])] == by_entry[str(lunch["id"])]
+    assert after[str(lunch["id"])]["start"] == {"date": day()}
+    assert after[str(lunch["id"])]["end"] == {"date": day(1)}
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
 
 
 def test_an_event_without_this_households_mark_is_never_touched(

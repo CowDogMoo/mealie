@@ -203,7 +203,13 @@ yesterday onward, list the calendar's events that carry this household's private
 (`mealieHousehold`, with `mealieEntry` naming the plan entry), then add what is missing, patch what
 differs, and delete what has no entry or is a second copy of one. An event without the household's
 property is never touched, and events before yesterday are left as a record of what was eaten. No
-event id is stored in Mealie, so there is nothing to drift. Three things set a sync off: the meal
+event id is stored in Mealie, so there is nothing to drift. A dinner is a timed event from 6:00 PM
+to 8:00 PM on its date; every other kind of meal is an all-day event; both are marked free, so
+neither blocks anyone's time. The hours are in the server's time zone, the `TZ` the container is
+started with (it has to be `America/Denver` for this household), because Mealie keeps no time zone per household; the offset
+is worked out for the date itself, so dinner stays at six across a daylight-saving change. With
+`TZ` unset the server is on UTC and dinner lands at 6:00 PM UTC. A dinner an older version wrote
+as an all-day event is patched into its hours by the next sync, in place. Three things set a sync off: the meal
 plan's own `mealplan_entry_*` events on the event bus (a new listener, run as a background task
 after the response, so a Google failure can neither fail nor slow a plan change);
 `POST /api/households/calendar-sync/sync`, the page's "Sync now"; and an hourly scheduler task,

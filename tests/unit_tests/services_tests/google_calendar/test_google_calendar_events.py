@@ -2,9 +2,12 @@
 calendar equal to a plan, and for the gate that keeps two reconciles from overlapping."""
 
 import threading
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
+
+import pytest
 
 from mealie.schema.meal_plan.new_meal import ReadPlanEntry
 from mealie.schema.recipe.recipe import RecipeSummary
@@ -17,13 +20,20 @@ from mealie.services.google_calendar.events import (
     event_body,
     event_differs,
     patch_body,
+    start_date_of,
 )
-from mealie.services.household_services.calendar_sync import HouseholdSyncGate, reconcile, window_start
+from mealie.services.household_services.calendar_sync import (
+    HouseholdSyncGate,
+    reconcile,
+    server_zone,
+    window_start,
+)
 from tests.utils.fake_google_calendar import FakeGoogleCalendar, service_account_credentials
 
 HOUSEHOLD = "0b8a4f6e-3d0c-4d53-9b65-4f3f1e6f2a11"
 BASE_URL = "https://mealie.example.test"
 CALENDAR = "dinner@group.calendar.google.com"
+DENVER = ZoneInfo("America/Denver")
 
 
 def entry(
@@ -45,23 +55,59 @@ def entry(
 
 
 def body(plan_entry: ReadPlanEntry) -> dict[str, Any]:
-    return event_body(plan_entry, household_id=HOUSEHOLD, base_url=BASE_URL, group_slug="home")
+    return event_body(plan_entry, household_id=HOUSEHOLD, base_url=BASE_URL, group_slug="home", zone=DENVER)
 
 
 # ---------------------------------------------------------------------------
 # one entry, one event
 
 
-def test_a_recipe_entry_becomes_an_all_day_event_that_blocks_nobodys_time():
+def test_a_dinner_becomes_an_event_from_six_to_eight_that_blocks_nobodys_time():
     assert body(entry()) == {
         "summary": "Dinner: Lentil Tacos",
         "description": "https://mealie.example.test/g/home/r/lentil-tacos",
-        "start": {"date": "2026-11-12"},
-        "end": {"date": "2026-11-13"},
+        "start": {"dateTime": "2026-11-12T18:00:00-07:00", "timeZone": "America/Denver"},
+        "end": {"dateTime": "2026-11-12T20:00:00-07:00", "timeZone": "America/Denver"},
         "transparency": "transparent",
         "source": {"title": "Lentil Tacos", "url": "https://mealie.example.test/g/home/r/lentil-tacos"},
         "extendedProperties": {"private": {HOUSEHOLD_PROPERTY: HOUSEHOLD, ENTRY_PROPERTY: "41"}},
     }
+
+
+@pytest.mark.parametrize(
+    ("on", "offset"),
+    [
+        (date(2026, 10, 31), "-06:00"),  # the last evening of daylight time
+        (date(2026, 11, 1), "-07:00"),  # the clocks went back that morning
+        (date(2027, 3, 13), "-07:00"),  # the last evening of standard time
+        (date(2027, 3, 14), "-06:00"),  # the clocks went forward that morning
+        (date(2026, 7, 4), "-06:00"),
+    ],
+)
+def test_dinner_is_at_six_on_the_kitchen_clock_on_either_side_of_a_daylight_saving_change(on: date, offset: str):
+    event = body(entry(on=on))
+
+    assert event["start"] == {"dateTime": f"{on.isoformat()}T18:00:00{offset}", "timeZone": "America/Denver"}
+    assert event["end"] == {"dateTime": f"{on.isoformat()}T20:00:00{offset}", "timeZone": "America/Denver"}
+
+
+@pytest.mark.parametrize("kind", ["breakfast", "lunch", "side", "snack", "drink", "dessert"])
+def test_every_other_kind_of_meal_is_still_an_all_day_event(kind: str):
+    event = body(entry(entry_type=kind))
+
+    assert event["summary"] == f"{kind.capitalize()}: Lentil Tacos"
+    assert event["start"] == {"date": "2026-11-12"}
+    assert event["end"] == {"date": "2026-11-13"}
+    assert event["transparency"] == "transparent"
+    assert event["extendedProperties"] == {"private": {HOUSEHOLD_PROPERTY: HOUSEHOLD, ENTRY_PROPERTY: "41"}}
+
+
+def test_a_zone_without_a_name_still_gives_dinner_its_offset():
+    fixed = timezone(timedelta(hours=-7))
+    event = event_body(entry(), household_id=HOUSEHOLD, base_url=BASE_URL, group_slug="home", zone=fixed)
+
+    assert event["start"] == {"dateTime": "2026-11-12T18:00:00-07:00"}
+    assert event["end"] == {"dateTime": "2026-11-12T20:00:00-07:00"}
 
 
 def test_an_entry_that_is_only_a_note_uses_its_title_and_links_nowhere():
@@ -86,13 +132,13 @@ def test_the_recipes_name_wins_over_a_title_and_a_bare_entry_is_just_its_meal():
     assert body(bare)["summary"] == "Dinner"
 
 
-def test_the_event_ends_the_next_day_across_a_month_and_a_year():
-    assert body(entry(on=date(2026, 11, 30)))["end"] == {"date": "2026-12-01"}
-    assert body(entry(on=date(2026, 12, 31)))["end"] == {"date": "2027-01-01"}
+def test_an_all_day_event_ends_the_next_day_across_a_month_and_a_year():
+    assert body(entry(on=date(2026, 11, 30), entry_type="lunch"))["end"] == {"date": "2026-12-01"}
+    assert body(entry(on=date(2026, 12, 31), entry_type="lunch"))["end"] == {"date": "2027-01-01"}
 
 
 def test_without_a_group_slug_there_is_no_link_rather_than_a_broken_one():
-    event = event_body(entry(), household_id=HOUSEHOLD, base_url=BASE_URL, group_slug=None)
+    event = event_body(entry(), household_id=HOUSEHOLD, base_url=BASE_URL, group_slug=None, zone=DENVER)
 
     assert event["description"] == ""
     assert "source" not in event
@@ -106,8 +152,8 @@ def test_an_event_belongs_to_a_household_only_by_its_private_property():
     assert not belongs_to({"extendedProperties": {"shared": {HOUSEHOLD_PROPERTY: HOUSEHOLD}}}, HOUSEHOLD)
 
 
-def test_an_event_differs_when_its_name_text_or_day_no_longer_match():
-    wanted = body(entry(text="Double it"))
+def test_an_all_day_event_differs_when_its_name_text_or_day_no_longer_match():
+    wanted = body(entry(text="Double it", entry_type="lunch"))
     stored = wanted | {"id": "e1", "status": "confirmed"}
 
     assert not event_differs(stored, wanted)
@@ -116,15 +162,40 @@ def test_an_event_differs_when_its_name_text_or_day_no_longer_match():
     # nor is anything a person changed that the plan has no opinion about
     assert not event_differs(stored | {"colorId": "5", "transparency": "opaque", "reminders": {}}, wanted)
 
-    assert event_differs(stored | {"summary": "Dinner: Lentil Tacos!"}, wanted)
+    assert event_differs(stored | {"summary": "Lunch: Lentil Tacos!"}, wanted)
     assert event_differs(stored | {"description": ""}, wanted)
     assert event_differs(stored | {"start": {"date": "2026-11-13"}}, wanted)
     assert event_differs(stored | {"end": {"date": "2026-11-14"}}, wanted)
     assert event_differs(stored | {"start": {"dateTime": "2026-11-12T18:00:00-07:00"}}, wanted)
 
 
+def test_a_dinner_differs_by_the_moment_it_is_at_and_not_by_how_google_writes_it():
+    wanted = body(entry())
+    stored = wanted | {"id": "e1", "status": "confirmed"}
+
+    assert not event_differs(stored, wanted)
+    # the same two moments, as a calendar kept in another zone hands them back
+    elsewhere = {
+        "start": {"dateTime": "2026-11-13T01:00:00Z", "timeZone": "Europe/London"},
+        "end": {"dateTime": "2026-11-13T03:00:00+00:00", "timeZone": "Europe/London"},
+    }
+    assert not event_differs(stored | elsewhere, wanted)
+
+    # a dinner still written the old way, as a whole day
+    assert event_differs(stored | {"start": {"date": "2026-11-12"}, "end": {"date": "2026-11-13"}}, wanted)
+    # dragged to another hour, or stretched
+    assert event_differs(stored | {"start": {"dateTime": "2026-11-12T17:00:00-07:00"}}, wanted)
+    assert event_differs(stored | {"end": {"dateTime": "2026-11-12T19:00:00-07:00"}}, wanted)
+    # another day at the same hour
+    assert event_differs(stored | {"start": {"dateTime": "2026-11-13T18:00:00-07:00"}}, wanted)
+    # nothing that can be read as a moment
+    assert event_differs(stored | {"start": {"dateTime": "six-ish"}}, wanted)
+    assert event_differs(stored | {"start": {"dateTime": "2026-11-12T18:00:00"}}, wanted)
+    assert event_differs(stored | {"start": {}}, wanted)
+
+
 def test_a_patch_removes_what_a_plain_patch_would_leave_behind():
-    wanted = body(entry(recipe=None, title="Leftovers"))
+    wanted = body(entry(recipe=None, title="Leftovers", entry_type="lunch"))
 
     plain = patch_body(wanted | {"id": "e1"}, wanted)
     assert plain == wanted
@@ -143,6 +214,28 @@ def test_a_patch_removes_what_a_plain_patch_would_leave_behind():
     assert wanted["start"] == {"date": "2026-11-12"}
 
 
+def test_a_patch_takes_the_date_off_an_all_day_dinner_when_it_gives_it_an_hour():
+    wanted = body(entry())
+    all_day = wanted | {"id": "e1", "start": {"date": "2026-11-12"}, "end": {"date": "2026-11-13"}}
+
+    patch = patch_body(all_day, wanted)
+    assert patch["start"] == {"date": None, "dateTime": "2026-11-12T18:00:00-07:00", "timeZone": "America/Denver"}
+    assert patch["end"] == {"date": None, "dateTime": "2026-11-12T20:00:00-07:00", "timeZone": "America/Denver"}
+    assert patch["extendedProperties"] == wanted["extendedProperties"]
+    assert patch["transparency"] == "transparent"
+
+    # a dinner that already has its hour is patched without any nulls
+    assert patch_body(wanted | {"id": "e1"}, wanted) == wanted
+
+
+def test_a_timed_events_day_is_read_in_the_zone_it_was_written_in():
+    assert start_date_of({"start": {"date": "2026-11-12"}}, DENVER) == "2026-11-12"
+    # six in the evening in Denver, handed back by a calendar kept in UTC
+    assert start_date_of({"start": {"dateTime": "2026-11-13T01:00:00Z"}}, DENVER) == "2026-11-12"
+    assert start_date_of({"start": {"dateTime": "2026-11-13T01:00:00Z"}}) == "2026-11-13"
+    assert start_date_of({}, DENVER) is None
+
+
 # ---------------------------------------------------------------------------
 # a plan and a calendar
 
@@ -150,7 +243,7 @@ def test_a_patch_removes_what_a_plain_patch_would_leave_behind():
 def reconciled(google: FakeGoogleCalendar, plan: list[ReadPlanEntry], first_day: date) -> dict[str, int]:
     with google.client() as http:
         client = GoogleCalendarClient(service_account_credentials(), http, AccessTokenCache())
-        result = reconcile(client, CALENDAR, HOUSEHOLD, {str(e.id): body(e) for e in plan}, first_day)
+        result = reconcile(client, CALENDAR, HOUSEHOLD, {str(e.id): body(e) for e in plan}, first_day, DENVER)
     return result.model_dump()
 
 
@@ -159,7 +252,7 @@ def test_a_timed_event_is_put_back_to_all_day_and_a_dropped_recipe_loses_its_lin
     google.add_calendar(CALENDAR)
     first_day = date(2026, 11, 11)
 
-    with_recipe = entry()
+    with_recipe = entry(entry_type="lunch")
     assert reconciled(google, [with_recipe], first_day) == {"created": 1, "updated": 0, "deleted": 0}
     [event] = google.events(CALENDAR)
 
@@ -169,18 +262,89 @@ def test_a_timed_event_is_put_back_to_all_day_and_a_dropped_recipe_loses_its_lin
         "end": {"dateTime": "2026-11-12T19:00:00-07:00", "timeZone": "America/Denver"},
     }
     # ...and the plan swaps the recipe for a note
-    note = entry(recipe=None, title="Leftovers")
+    note = entry(recipe=None, title="Leftovers", entry_type="lunch")
 
     assert reconciled(google, [note], first_day) == {"created": 0, "updated": 1, "deleted": 0}
 
     [after] = google.events(CALENDAR)
     assert after["id"] == event["id"]
-    assert after["summary"] == "Dinner: Leftovers"
+    assert after["summary"] == "Lunch: Leftovers"
     assert after["start"] == {"date": "2026-11-12"}
     assert after["end"] == {"date": "2026-11-13"}
     assert "source" not in after
 
     assert reconciled(google, [note], first_day) == {"created": 0, "updated": 0, "deleted": 0}
+
+
+def old_all_day_body(plan_entry: ReadPlanEntry) -> dict[str, Any]:
+    """A dinner's event as it was written before dinners had an hour: the whole day."""
+
+    return body(plan_entry) | {
+        "start": {"date": plan_entry.date.isoformat()},
+        "end": {"date": (plan_entry.date + timedelta(days=1)).isoformat()},
+    }
+
+
+def test_an_all_day_dinner_from_an_older_sync_is_given_its_hour_in_place():
+    google = FakeGoogleCalendar()
+    google.add_calendar(CALENDAR)
+    first_day = date(2026, 11, 11)
+
+    dinner = entry()
+    lunch = entry(entry_id=42, entry_type="lunch")
+    old = google.seed_event(CALENDAR, old_all_day_body(dinner))
+    google.seed_event(CALENDAR, body(lunch))
+
+    assert reconciled(google, [dinner, lunch], first_day) == {"created": 0, "updated": 1, "deleted": 0}
+
+    events = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in google.events(CALENDAR)}
+    assert len(google.events(CALENDAR)) == 2, "no second event for the dinner"
+
+    converted = events["41"]
+    assert converted["id"] == old["id"]
+    assert converted["start"] == {"dateTime": "2026-11-12T18:00:00-07:00", "timeZone": "America/Denver"}
+    assert converted["end"] == {"dateTime": "2026-11-12T20:00:00-07:00", "timeZone": "America/Denver"}
+    assert converted["transparency"] == "transparent"
+    assert belongs_to(converted, HOUSEHOLD)
+
+    assert events["42"]["start"] == {"date": "2026-11-12"}
+
+    # and the timed event is recognised as the entry's own from then on
+    assert reconciled(google, [dinner, lunch], first_day) == {"created": 0, "updated": 0, "deleted": 0}
+
+
+def test_a_dinner_handed_back_in_the_calendars_own_zone_is_left_alone():
+    google = FakeGoogleCalendar()
+    google.add_calendar(CALENDAR)
+    first_day = date(2026, 11, 11)
+
+    dinner = entry()
+    assert reconciled(google, [dinner], first_day) == {"created": 1, "updated": 0, "deleted": 0}
+    [event] = google.events(CALENDAR)
+
+    # Google answers in the calendar's zone, whatever zone the event was written in
+    google.calendars[CALENDAR][event["id"]] |= {
+        "start": {"dateTime": "2026-11-13T01:00:00Z", "timeZone": "UTC"},
+        "end": {"dateTime": "2026-11-13T03:00:00Z", "timeZone": "UTC"},
+    }
+
+    assert reconciled(google, [dinner], first_day) == {"created": 0, "updated": 0, "deleted": 0}
+
+
+def test_an_eaten_dinner_is_a_record_even_when_the_calendar_puts_its_evening_on_the_next_day():
+    google = FakeGoogleCalendar()
+    google.add_calendar(CALENDAR)
+    first_day = date(2026, 11, 11)
+
+    eaten = google.seed_event(
+        CALENDAR,
+        body(entry(entry_id=7, on=date(2026, 11, 10)))
+        # six in the evening on the 10th in Denver is one in the morning on the 11th in UTC
+        | {"start": {"dateTime": "2026-11-11T01:00:00Z"}, "end": {"dateTime": "2026-11-11T03:00:00Z"}},
+    )
+
+    assert reconciled(google, [], first_day) == {"created": 0, "updated": 0, "deleted": 0}
+    assert [event["id"] for event in google.events(CALENDAR)] == [eaten["id"]]
 
 
 def test_an_entry_moved_from_before_the_window_into_it_takes_its_event_along():
@@ -195,7 +359,7 @@ def test_an_entry_moved_from_before_the_window_into_it_takes_its_event_along():
     assert reconciled(google, [now], first_day) == {"created": 0, "updated": 1, "deleted": 0}
 
     [event] = google.events(CALENDAR)
-    assert event["start"] == {"date": "2026-11-14"}
+    assert event["start"] == {"dateTime": "2026-11-14T18:00:00-07:00", "timeZone": "America/Denver"}
 
 
 class UnfilteredCalendar:
@@ -233,7 +397,7 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
 
     somebodys_own = {"id": "own", "summary": "Dinner: Lentil Tacos", "start": day, "end": wanted["end"]}
     neighbours = {
-        **event_body(planned, household_id=str(uuid4()), base_url=BASE_URL, group_slug="home"),
+        **event_body(planned, household_id=str(uuid4()), base_url=BASE_URL, group_slug="home", zone=DENVER),
         "id": "neighbours",
         "summary": "Dinner: something else entirely",
     }
@@ -249,6 +413,20 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
     assert calendar.patched == []
     assert calendar.inserted == [wanted]
     assert result.model_dump() == {"created": 1, "updated": 0, "deleted": 1}
+
+
+def test_the_servers_zone_is_the_one_tz_names_and_the_systems_own_otherwise(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("TZ", "America/Denver")
+    assert server_zone() == DENVER
+
+    for unusable in ("", "Not/A_Zone", "MST7MDT,M3.2.0,M11.1.0"):
+        monkeypatch.setenv("TZ", unusable)
+        zone = server_zone()
+        assert not isinstance(zone, ZoneInfo)
+        assert datetime(2026, 11, 12, 18, tzinfo=zone).utcoffset() is not None
+
+    monkeypatch.delenv("TZ")
+    assert datetime(2026, 11, 12, 18, tzinfo=server_zone()).utcoffset() is not None
 
 
 def test_the_window_starts_yesterday():

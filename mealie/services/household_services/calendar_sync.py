@@ -11,6 +11,9 @@ window are ever changed or removed. Older events stay as they were: a record of 
 "Yesterday" rather than "today" so that a server whose clock is hours ahead of the kitchen does
 not stop caring about tonight's dinner in the middle of the afternoon.
 
+**When.** A dinner is a timed event, six to eight in the evening in the server's time zone; any
+other meal is an all-day event. Both are marked as not blocking anyone's time.
+
 **What is never touched.** An event without this household's private property. The calendar is a
 shared, human calendar; the mirror owns only what it wrote.
 
@@ -22,11 +25,13 @@ after everything that asked. The lock is in this process only. If two processes 
 the reconcile's removal of duplicate events for one entry is what puts it right, on the next run.
 """
 
+import os
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.tz import tzlocal
 from pydantic import UUID4
@@ -144,10 +149,29 @@ sync_gate = HouseholdSyncGate()
 """The process-wide gate every trigger goes through."""
 
 
+def server_zone() -> tzinfo:
+    """The time zone a dinner's six o'clock is in: the server's, which is the household's.
+
+    Mealie keeps no time zone per household; the server's `TZ` is where its day already comes from
+    (see `window_start`). When `TZ` names an IANA zone, as it does in a container, that zone is
+    used and named on the event. Otherwise the system's local zone is, which knows its offsets on
+    any given day but not its own name.
+    """
+
+    name = os.environ.get("TZ", "").strip().removeprefix(":")
+    if name:
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            pass
+
+    return tzlocal()
+
+
 def window_start(today: date | None = None) -> date:
     """The first day the mirror covers."""
 
-    today = today or datetime.now(tzlocal()).date()
+    today = today or datetime.now(server_zone()).date()
     return today - timedelta(days=WINDOW_LOOKBACK_DAYS)
 
 
@@ -157,11 +181,13 @@ def reconcile(
     household_id: str,
     desired: dict[str, dict[str, Any]],
     first_day: date,
+    zone: tzinfo | None = None,
 ) -> CalendarSyncResult:
     """Make the calendar's events for this household equal `desired`, keyed by plan entry id.
 
     Adds what is missing, patches what no longer matches, and deletes events whose entry is gone
-    along with any second event for an entry that already has one.
+    along with any second event for an entry that already has one. `zone` is the zone the desired
+    events were written in; a timed event's day is read there.
     """
 
     ends_after = datetime.combine(first_day - timedelta(days=LIST_MARGIN_DAYS), time.min, tzinfo=UTC)
@@ -175,7 +201,7 @@ def reconcile(
             continue
 
         entry_id = entry_id_of(event)
-        if entry_id not in desired and (start_date_of(event) or "") < first_day.isoformat():
+        if entry_id not in desired and (start_date_of(event, zone) or "") < first_day.isoformat():
             # before the window and not wanted in it: a dinner that was eaten. Leave it be.
             continue
 
@@ -361,7 +387,7 @@ class CalendarSyncService(BaseService):
         except CalendarSyncFailedError:
             return None
 
-    def _desired_events(self, first_day: date) -> dict[str, dict[str, Any]]:
+    def _desired_events(self, first_day: date, zone: tzinfo) -> dict[str, dict[str, Any]]:
         entries = self.repos.meals.page_all(
             PaginationQuery(page=1, per_page=-1, query_filter=f"date >= {first_day.isoformat()}")
         ).items
@@ -371,17 +397,22 @@ class CalendarSyncService(BaseService):
 
         return {
             str(entry.id): event_body(
-                entry, household_id=self.household_id, base_url=self.settings.BASE_URL, group_slug=group_slug
+                entry,
+                household_id=self.household_id,
+                base_url=self.settings.BASE_URL,
+                group_slug=group_slug,
+                zone=zone,
             )
             for entry in entries
         }
 
     def _sync(self, row: CalendarSyncOut, credentials: GoogleCredentials) -> CalendarSyncResult:
         try:
+            zone = server_zone()
             first_day = window_start()
-            desired = self._desired_events(first_day)
+            desired = self._desired_events(first_day, zone)
             with google_client.open_client(credentials) as calendar:
-                result = reconcile(calendar, row.calendar_id or "", self.household_id, desired, first_day)
+                result = reconcile(calendar, row.calendar_id or "", self.household_id, desired, first_day, zone)
         except (GoogleAuthError, GoogleCalendarError) as e:
             reason = _one_line(str(e))
             self.logger.warning("calendar sync failed for household %s: %s", self.household_id, reason)

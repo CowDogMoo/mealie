@@ -8,10 +8,10 @@ cannot go stale, and an event without the household's property is by definition 
 and is never read as ours.
 """
 
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Any
 
-from mealie.schema.meal_plan.new_meal import ReadPlanEntry
+from mealie.schema.meal_plan.new_meal import PlanEntryType, ReadPlanEntry
 from mealie.services.urls.url_constructors import recipe_url
 
 HOUSEHOLD_PROPERTY = "mealieHousehold"
@@ -22,6 +22,15 @@ ENTRY_PROPERTY = "mealieEntry"
 
 TRANSPARENT = "transparent"
 """Google's word for "does not block time": dinner is on the calendar, nobody is busy during it."""
+
+DINNER_START = time(18, 0)
+DINNER_END = time(20, 0)
+"""When a dinner is on the calendar: six to eight in the evening, by the server's clock. Every
+other kind of meal has no hour of its own and is an all-day event."""
+
+EDGE_FIELDS = ("date", "dateTime", "timeZone")
+"""What an event's start or end can be made of: a date for an all-day event, or a clock time and,
+optionally, the name of the zone it was written in."""
 
 
 def recipe_link(entry: ReadPlanEntry, base_url: str, group_slug: str | None) -> str | None:
@@ -41,18 +50,49 @@ def event_summary(entry: ReadPlanEntry) -> str:
     return f"{kind}: {what}" if what else kind
 
 
-def event_body(entry: ReadPlanEntry, *, household_id: str, base_url: str, group_slug: str | None) -> dict[str, Any]:
-    """The event a plan entry should be: all day, on the entry's date, blocking nobody's time."""
+def _edge(day: date, at: time, zone: tzinfo) -> dict[str, str]:
+    """One end of a timed event: the wall-clock time on that day, with the offset the zone has then.
+
+    The offset is worked out for the day itself, so an event on either side of a daylight-saving
+    change is at the same hour on the kitchen clock. A zone that knows its own name (an IANA one,
+    like America/Denver) is named too.
+    """
+
+    edge = {"dateTime": datetime.combine(day, at, tzinfo=zone).isoformat()}
+    name = getattr(zone, "key", None)
+    if name:
+        edge["timeZone"] = str(name)
+
+    return edge
+
+
+def event_times(entry: ReadPlanEntry, zone: tzinfo) -> tuple[dict[str, str], dict[str, str]]:
+    """When an entry's event starts and ends: six to eight for a dinner, the whole day otherwise."""
+
+    if entry.entry_type == PlanEntryType.dinner:
+        return _edge(entry.date, DINNER_START, zone), _edge(entry.date, DINNER_END, zone)
+
+    # an all-day event runs from its date up to, not including, the next one
+    return {"date": entry.date.isoformat()}, {"date": (entry.date + timedelta(days=1)).isoformat()}
+
+
+def event_body(
+    entry: ReadPlanEntry, *, household_id: str, base_url: str, group_slug: str | None, zone: tzinfo
+) -> dict[str, Any]:
+    """The event a plan entry should be: on the entry's date, blocking nobody's time.
+
+    `zone` is the time zone the household keeps its clock in, which is the server's.
+    """
 
     link = recipe_link(entry, base_url, group_slug)
     description = "\n\n".join(part for part in ((entry.text or "").strip(), link) if part)
+    start, end = event_times(entry, zone)
 
     body: dict[str, Any] = {
         "summary": event_summary(entry),
         "description": description,
-        # an all-day event runs from its date up to, not including, the next one
-        "start": {"date": entry.date.isoformat()},
-        "end": {"date": (entry.date + timedelta(days=1)).isoformat()},
+        "start": start,
+        "end": end,
         "transparency": TRANSPARENT,
         "extendedProperties": {"private": {HOUSEHOLD_PROPERTY: household_id, ENTRY_PROPERTY: str(entry.id)}},
     }
@@ -78,13 +118,32 @@ def entry_id_of(event: dict[str, Any]) -> str | None:
     return str(value) if value else None
 
 
-def start_date_of(event: dict[str, Any]) -> str | None:
-    """The date of an all-day event, or the day a timed one starts on."""
+def _instant(value: Any) -> datetime | None:
+    """The moment a `dateTime` names, or None when it is missing or names none."""
+
+    try:
+        moment = datetime.fromisoformat(str(value)) if value else None
+    except ValueError:
+        return None
+
+    return moment if moment is not None and moment.tzinfo is not None else None
+
+
+def start_date_of(event: dict[str, Any], zone: tzinfo | None = None) -> str | None:
+    """The date of an all-day event, or the day a timed one starts on.
+
+    Google hands a timed event back in the calendar's own zone, which need not be the server's: six
+    in the evening in Denver is already tomorrow in London. Given `zone`, the day is read there, so
+    it is the day of the plan entry the event was written for.
+    """
 
     start = event.get("start") or {}
     if start.get("date"):
         return str(start["date"])
     if start.get("dateTime"):
+        moment = _instant(start["dateTime"])
+        if moment is not None and zone is not None:
+            return moment.astimezone(zone).date().isoformat()
         return str(start["dateTime"])[:10]
     return None
 
@@ -93,30 +152,45 @@ def _text(value: Any) -> str:
     return str(value or "").replace("\r\n", "\n").strip()
 
 
+def _edge_differs(existing: dict[str, Any], desired: dict[str, Any]) -> bool:
+    """Whether one end of an event is at another time than wanted.
+
+    An all-day end is compared by its date. A timed one is compared as a moment and not as text,
+    because Google returns the same moment written in the calendar's zone and offset.
+    """
+
+    if "dateTime" in desired:
+        moment = _instant(existing.get("dateTime"))
+        return existing.get("date") is not None or moment is None or moment != _instant(desired["dateTime"])
+
+    return existing.get("dateTime") is not None or existing.get("date") != desired["date"]
+
+
 def event_differs(existing: dict[str, Any], desired: dict[str, Any]) -> bool:
-    """Whether an event no longer says what its plan entry says: its name, its text or its day."""
+    """Whether an event no longer says what its plan entry says: its name, its text or its time."""
 
     return (
         _text(existing.get("summary")) != _text(desired.get("summary"))
         or _text(existing.get("description")) != _text(desired.get("description"))
-        or (existing.get("start") or {}).get("date") != desired["start"]["date"]
-        or (existing.get("end") or {}).get("date") != desired["end"]["date"]
+        or _edge_differs(existing.get("start") or {}, desired["start"])
+        or _edge_differs(existing.get("end") or {}, desired["end"])
     )
 
 
 def patch_body(existing: dict[str, Any], desired: dict[str, Any]) -> dict[str, Any]:
     """What to send to make `existing` say what `desired` says.
 
-    A patch only replaces the fields it names, so two leftovers have to be removed by name, which
-    the Calendar API does when a field is sent as null: the clock time of an event somebody turned
-    from all-day into a timed one, and the recipe link of an entry that no longer has a recipe.
+    A patch only replaces the fields it names, so leftovers have to be removed by name, which the
+    Calendar API does when a field is sent as null: the date of an all-day event that is becoming
+    a timed one (a dinner written before dinners had an hour), the clock time of a timed event
+    that is becoming all-day, and the recipe link of an entry that no longer has a recipe.
     """
 
     body: dict[str, Any] = {**desired, "start": dict(desired["start"]), "end": dict(desired["end"])}
 
     for edge in ("start", "end"):
-        if (existing.get(edge) or {}).get("dateTime"):
-            body[edge] |= {"dateTime": None, "timeZone": None}
+        was = existing.get(edge) or {}
+        body[edge] |= {field: None for field in EDGE_FIELDS if was.get(field) and field not in desired[edge]}
 
     if existing.get("source") and "source" not in desired:
         body["source"] = None
