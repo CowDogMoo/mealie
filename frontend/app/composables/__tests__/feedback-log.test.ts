@@ -165,3 +165,42 @@ describe("hiddenRecipeIds", () => {
     expect(hidden.size).toBe(0);
   });
 });
+
+describe("the x: removing a recipe from your list", () => {
+  test("hides the recipe it was pressed on, with no opinion and no request behind it", () => {
+    const log = [event({ id: "x", recipeId: "a", vote: "dismiss" })];
+
+    expect([...hiddenRecipeIds(log)]).toEqual(["a"]);
+    // not an answer: no thumb lights up for it
+    expect(latestFeedbackByRecipe(log).size).toBe(0);
+    // and not a request: the die must not show "asked for a new one"
+    expect(latestRefillByRecipe(log).size).toBe(0);
+  });
+
+  test("removing a recipe you voted up hides it without changing the answer", () => {
+    const log = [
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "x", recipeId: "a", vote: "dismiss", createdAt: "2026-09-02T00:00:00" }),
+    ];
+
+    expect(hiddenRecipeIds(log).has("a")).toBe(true);
+    expect(latestFeedbackByRecipe(log).get("a")?.id).toBe("up");
+  });
+
+  test("undoing it (it vanishes from the log) brings the recipe back", () => {
+    const hidden = hiddenRecipeIds([
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-01T00:00:00" }),
+    ]);
+
+    expect(hidden.size).toBe(0);
+  });
+
+  test("a later thumbs up lifts it, the same as it lifts a thumbs down", () => {
+    const hidden = hiddenRecipeIds([
+      event({ id: "x", recipeId: "a", vote: "dismiss", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-02T00:00:00" }),
+    ]);
+
+    expect(hidden.size).toBe(0);
+  });
+});

@@ -105,6 +105,7 @@ const feedback = enUS.feedback;
 const THUMBS_UP = `[aria-label="${feedback["thumbs-up"]}"]`;
 const THUMBS_DOWN = `[aria-label="${feedback["thumbs-down"]}"]`;
 const FIND_NEW = "[data-test=\"find-new\"]";
+const DISMISS = "[data-test=\"dismiss\"]";
 
 // each thumb owns a tooltip, and Vuetify teleports tooltip content to a container on the body
 // that outlives the test unless the card it belongs to is torn down
@@ -217,6 +218,22 @@ describe("RecipeCard feedback controls", () => {
 
     expect(wrapper.text()).toContain("Chicken thighs with fennel");
     expect(wrapper.findComponent(RecipeFeedbackButtons).exists()).toBe(false);
+  });
+
+  test("the x removes the recipe in one press: no dialog, no reason, no thumb moved", async () => {
+    selfFeedback.value = [{ recipeId: "recipe-uuid", vote: "up", createdAt: "2026-09-01T00:00:00" }];
+    const wrapper = mountCard({ showFeedback: true });
+
+    expect(wrapper.find(DISMISS).attributes("aria-label")).toBe(feedback["dismiss"]);
+    await wrapper.find(DISMISS).trigger("click");
+    await flushPromises();
+
+    expect(setFeedback).toHaveBeenCalledTimes(1);
+    expect(setFeedback).toHaveBeenCalledWith("chicken-thighs-with-fennel", { vote: "dismiss" });
+    expect(alertSuccess).toHaveBeenCalledWith(feedback["dismissed"]);
+
+    // the up vote is still the answer shown on the thumbs
+    expect(wrapper.find(THUMBS_UP).find(".v-icon").classes()).toContain("text-success");
   });
 
   test("the die asks for a new recipe without touching the thumbs", async () => {

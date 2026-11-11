@@ -73,6 +73,26 @@
       </v-tooltip>
     </v-btn>
 
+    <v-btn
+      :size="small ? 'x-small' : 'small'"
+      :disabled="saving"
+      :aria-label="$t('feedback.dismiss')"
+      data-test="dismiss"
+      icon
+      variant="text"
+      @click="dismiss"
+    >
+      <v-icon :size="small ? 'small' : undefined">
+        {{ $globals.icons.close }}
+      </v-icon>
+      <v-tooltip
+        activator="parent"
+        location="bottom"
+      >
+        {{ $t("feedback.dismiss") }}
+      </v-tooltip>
+    </v-btn>
+
     <RecipeFeedbackDialog
       v-model="dialog"
       :recipe-id="recipeId"
@@ -86,7 +106,12 @@ import RecipeFeedbackDialog from "./RecipeFeedbackDialog.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { alert } from "~/composables/use-toast";
 import { useUserSelfFeedback } from "~/composables/use-users";
-import { REFILL_VOTE, latestFeedbackByRecipe, latestRefillByRecipe } from "~/composables/use-users/feedback-log";
+import {
+  DISMISS_VOTE,
+  REFILL_VOTE,
+  latestFeedbackByRecipe,
+  latestRefillByRecipe,
+} from "~/composables/use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
 /** A refill asked for this recently still shows on the die, so a person can see it was heard. */
@@ -138,6 +163,25 @@ async function requestRefill() {
   try {
     await setFeedback(props.slug, { vote: REFILL_VOTE });
     alert.success(i18n.t("feedback.find-new-requested"));
+  }
+  finally {
+    saving.value = false;
+  }
+}
+
+// The "x": take this recipe off my list without saying anything about it. No dialog, no star and
+// no thumb moves, which is the point -- a thumbs down needs a reason, and "not this one" often has
+// none. The recipe leaves the presser's own grids at once and the household's planner stops
+// suggesting it; My Recipe Feedback lists it under "Removed", where it can be undone.
+async function dismiss() {
+  if (saving.value) {
+    return;
+  }
+
+  saving.value = true;
+  try {
+    await setFeedback(props.slug, { vote: DISMISS_VOTE });
+    alert.success(i18n.t("feedback.dismissed"));
   }
   finally {
     saving.value = false;
