@@ -154,6 +154,14 @@
       @changed="refresh"
     />
 
+    <!-- What the list's recipes use that was left off because the household usually has it. -->
+    <ShoppingListPantryLeftOff
+      class="my-2"
+      :model-value="shoppingList"
+      :disabled="isOffline"
+      @changed="refresh"
+    />
+
     <!-- Viewer -->
     <section v-if="!edit" class="py-2 d-flex flex-column ga-4">
       <!-- Create Item -->
@@ -358,6 +366,7 @@ import RecipeList from "~/components/Domain/Recipe/RecipeList.vue";
 import MultiPurposeLabelSection from "~/components/Domain/ShoppingList/MultiPurposeLabelSection.vue";
 import ShoppingListAddItemForm from "~/components/Domain/ShoppingList/ShoppingListAddItemForm.vue";
 import ShoppingListCartButton from "~/components/Domain/ShoppingList/ShoppingListCartButton.vue";
+import ShoppingListPantryLeftOff from "~/components/Domain/ShoppingList/ShoppingListPantryLeftOff.vue";
 import ShoppingListItem from "~/components/Domain/ShoppingList/ShoppingListItem.vue";
 import ShoppingListItemEditor from "~/components/Domain/ShoppingList/ShoppingListItemEditor.vue";
 import { useShoppingListPage } from "~/composables/shopping-list-page/use-shopping-list-page";

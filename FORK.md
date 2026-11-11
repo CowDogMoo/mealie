@@ -143,6 +143,26 @@ TypeScript copy, with a test that fails if the two drift. The upstream edits are
 `below-toolbar` slot in `RecipeCardSection.vue`, the bar in that slot on
 `RecipeExplorerPage.vue`, and the usual model, repository, router and client registrations.
 
+**Pantry staples.** A household marks the foods it usually has -- salt, sugar, olive oil -- and
+recipes leave them off the shopping list. There is no new storage: a staple is upstream's
+per-household "on hand" flag (`households_to_ingredient_foods`), which the shopping list service
+already skips when a recipe is added, so the add-to-list dialog, the foods page and the recipe
+finder all agree with the list without knowing it exists. What the fork adds is the part around
+the flag. `GET /api/households/pantry` lists the staples and suggests foods that look like ones;
+`PUT` and `DELETE /api/households/pantry/{food_id}` write one household's flag and nothing else
+(upstream can only replace a food's whole list of households); and
+`GET /api/households/pantry/shopping-lists/{id}` reports the staples a list's recipes use, which
+`<ShoppingListPantryLeftOff>` shows above the items with a tap to put one back, because "usually"
+is not "always". Marking a staple also marks its *plain forms* -- the same name with only words
+like "kosher", "fine" or "extra-virgin" in front -- and `POST /api/foods` gives a newly created
+plain form the flag too (`PantryService.inherit`), since recipe imports create a new spelling of
+salt most weeks. Any other word in front ("brown sugar", "garlic salt") is only ever suggested.
+`mealie/schema/household/pantry.py` is the copy of record for that rule and its word list. The
+upstream edits are the `inherit` call in `routes/unit_and_foods/foods.py`, and upstream's own
+later `skip_on_hand` fix ported into `services/household_services/shopping_lists.py` so that an
+ingredient somebody ticks by hand in the add-to-list dialog is added even when it is a staple;
+drop that port when a rebase brings the fix in.
+
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
 already reads ≤2 as a dislike and ≥4 as a like, so nothing downstream had to change on day
@@ -161,6 +181,8 @@ mealie/repos/repository_users.py
 mealie/repos/repository_factory.py
 mealie/routes/users/__init__.py
 mealie/routes/households/__init__.py
+mealie/routes/unit_and_foods/foods.py
+mealie/services/household_services/shopping_lists.py
 mealie/schema/household/__init__.py
 mealie/schema/recipe/__init__.py
 mealie/schema/user/__init__.py
@@ -182,6 +204,7 @@ frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPage.vue
 frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCard.vue
 frontend/app/pages/household/mealplan/planner/view.vue
 frontend/app/pages/shopping-lists/[id].vue
+frontend/app/pages/user/profile/index.vue
 frontend/app/lib/api/user/group-shopping-lists.ts
 frontend/app/lib/icons/icons.ts
 frontend/app/lang/messages/en-US.json

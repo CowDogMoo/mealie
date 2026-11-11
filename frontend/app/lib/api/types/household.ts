@@ -284,6 +284,38 @@ export interface HouseholdSummary {
   slug: string;
   preferences?: ReadHouseholdPreferences | null;
 }
+export interface PantryFood {
+  id: string;
+  name: string;
+  pluralName?: string | null;
+}
+export interface PantryLeftOff {
+  items?: PantryLeftOffItem[];
+}
+export interface PantryLeftOffItem {
+  food: PantryFood;
+  recipes?: PantryLeftOffRecipe[];
+  onList?: boolean;
+}
+export interface PantryLeftOffRecipe {
+  id: string;
+  slug?: string | null;
+  name?: string | null;
+}
+export interface PantryMarkOut {
+  food: PantryFood;
+  alsoMarked?: PantryFood[];
+}
+export interface PantryOut {
+  staples?: PantryFood[];
+  suggestions?: PantrySuggestion[];
+}
+export interface PantrySuggestion {
+  id: string;
+  name: string;
+  pluralName?: string | null;
+  because?: string | null;
+}
 export interface ReadInviteToken {
   token: string;
   usesLeft: number;

@@ -1171,6 +1171,8 @@
     "manage-webhooks": "Manage Webhooks",
     "manage-recipe-sources": "Manage Recipe Sources",
     "recipe-sources-description": "Decide which recipe sites your household trusts, which to treat with caution, and which to refuse imports from.",
+    "manage-pantry": "Manage Pantry Staples",
+    "pantry-description": "Tell Mealie what you usually have, like salt and olive oil, so recipes leave it off your shopping list.",
     "manage-notifiers": "Manage Notifiers",
     "manage-data-migrations": "Manage Data Migrations"
   },
@@ -1249,6 +1251,26 @@
     "removed": "{domain} removed",
     "add-failed": "{domain} could not be added. It may already be on the list.",
     "save-failed": "{domain} could not be saved. Another entry may already use that site."
+  },
+  "pantry": {
+    "title": "Pantry Staples",
+    "description": "Foods your household usually has. Recipes leave them off the shopping list. Marking one also covers its plain forms, so salt covers kosher salt and fine sea salt, including ones a recipe adds later.",
+    "manage": "Edit staples",
+    "add-label": "Add a food you usually have",
+    "staples-heading": "Usually on hand ({count})",
+    "empty": "Nothing marked yet. Add what you always have, and recipes will stop putting it on your shopping list.",
+    "remove": "Remove {food}",
+    "suggestions-heading": "You might also have",
+    "suggestions-description": "Foods in your recipes that look like staples. Tap one to mark it.",
+    "suggestion-because": "A kind of {staple}",
+    "added": "{food} is a pantry staple now",
+    "added-with-forms": "{food} is a pantry staple now, along with {forms}",
+    "removed": "{food} will go on shopping lists again",
+    "failed": "Your pantry staples could not be updated",
+    "left-off": "Left off because you usually have it:",
+    "add-back": "Add {food} to this list",
+    "added-to-list": "{food} added to the list",
+    "used-by": "Used by {recipes}"
   },
   "feedback": {
     "title": "Not for me",
