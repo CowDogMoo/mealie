@@ -186,8 +186,9 @@ describe("RecipeCardMobile feedback controls", () => {
     expect(wrapper.findAllComponents(VBtn)).toHaveLength(0);
     expect(wrapper.find(THUMBS_UP).exists()).toBe(false);
     expect(wrapper.find(THUMBS_DOWN).exists()).toBe(false);
-    // the rating keeps the classes it has upstream, at every width
+    // the rating and the row keep the classes they have upstream, at every width
     expect(wrapper.find("[data-test=\"card-rating\"]").classes()).not.toContain("rating-yields-to-feedback");
+    expect(wrapper.findComponent(VCardActions).classes()).not.toContain("recipe-feedback-row");
   });
 
   test("renders today's card when the prop is explicitly false", () => {
@@ -224,10 +225,11 @@ describe("RecipeCardMobile feedback controls", () => {
     expect(html.indexOf("card-rating")).toBeLessThan(html.indexOf(feedback["thumbs-up"]));
     expect(html.indexOf(feedback["thumbs-up"])).toBeLessThan(html.indexOf("context-menu"));
 
-    // jsdom reports a 1024px window, i.e. `sm` and up, where the stars are on show: there the
-    // thumbs take the compact size, which is what lets the row hold all four controls unclipped
+    // the thumbs take the compact size at every width, and the row is marked for the packing
+    // that brings the favourite and the menu down to match, so six controls share a 340px card
     expect(wrapper.findComponent(RecipeFeedbackButtons).props("small")).toBe(true);
     expect(wrapper.find(THUMBS_UP).classes()).toContain("v-btn--size-x-small");
+    expect(wrapper.findComponent(VCardActions).classes()).toContain("recipe-feedback-row");
 
     // ...and on phone-width cards the read-only stars step aside to pay for them
     expect(wrapper.find("[data-test=\"card-rating\"]").classes()).toContain("rating-yields-to-feedback");

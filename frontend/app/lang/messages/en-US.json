@@ -1283,6 +1283,7 @@
     "dismiss": "Remove from my list",
     "dismissed": "Removed. It is hidden from your recipes and won't be suggested again. Undo it from My Recipe Feedback.",
     "dismissed-filter": "Removed",
+    "save-failed": "That didn't go through, so nothing has changed. Try again in a moment.",
     "reason-label": "What put you off?",
     "scope-label": "How far does this go?",
     "apply-wider": "Let this apply more widely than the reason supports",
@@ -1307,8 +1308,8 @@
     "no-feedback-for-filter": "No votes match this filter.",
     "recipe-unavailable": "Recipe no longer available",
     "hidden-count": "{count} hidden",
-    "show-hidden": "Show recipes you voted down or asked to replace",
-    "hide-hidden": "Hide recipes you voted down or asked to replace",
+    "show-hidden": "Show recipes you voted down, asked to replace or removed",
+    "hide-hidden": "Hide recipes you voted down, asked to replace or removed",
     "reasons": {
       "i-did-not-like-this-recipe": "I didn't like this recipe",
       "i-do-not-like-this-dish": "I don't like this dish, however it's made",

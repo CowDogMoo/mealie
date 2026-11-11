@@ -25,62 +25,59 @@ export function isOpinion(event: UserFeedbackOut): boolean {
 }
 
 /**
- * The current answer for every recipe in a feedback log.
- *
- * The log keeps every vote a person ever cast; only the last one on each recipe is what they
- * think now. Ties fall to the later element, which is the order the API returns them in. A refill
- * request is not an answer, so it is skipped: asking for something new like a dish you voted up
- * must not read as having changed your mind about it.
+ * The newest event on each recipe among those `matches` lets through. Ties fall to the later
+ * element, which is the order the API returns them in.
  */
-export function latestFeedbackByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
-  const latest = new Map<string, UserFeedbackOut>();
+function newestByRecipe(
+  events: UserFeedbackOut[],
+  matches: (event: UserFeedbackOut) => boolean,
+): Map<string, UserFeedbackOut> {
+  const newest = new Map<string, UserFeedbackOut>();
   for (const event of events) {
-    if (!isOpinion(event)) {
+    if (!matches(event)) {
       continue;
     }
-    const current = latest.get(event.recipeId);
+    const current = newest.get(event.recipeId);
     if (!current || castAt(event) >= castAt(current)) {
-      latest.set(event.recipeId, event);
+      newest.set(event.recipeId, event);
     }
   }
 
-  return latest;
+  return newest;
+}
+
+/**
+ * The current answer for every recipe in a feedback log.
+ *
+ * The log keeps every vote a person ever cast; only the last one on each recipe is what they
+ * think now. A refill request is not an answer, so it is skipped: asking for something new like a
+ * dish you voted up must not read as having changed your mind about it. Neither is an "x".
+ */
+export function latestFeedbackByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
+  return newestByRecipe(events, isOpinion);
 }
 
 /**
  * The newest refill request per recipe, so the page can show that one was asked for and undo it.
  */
 export function latestRefillByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
-  const latest = new Map<string, UserFeedbackOut>();
-  for (const event of events) {
-    if (event.vote !== REFILL_VOTE) {
-      continue;
-    }
-    const current = latest.get(event.recipeId);
-    if (!current || castAt(event) >= castAt(current)) {
-      latest.set(event.recipeId, event);
-    }
-  }
-
-  return latest;
+  return newestByRecipe(events, event => event.vote === REFILL_VOTE);
 }
 
 /**
  * The newest "x" per recipe, so the page can list what a person removed and undo it.
  */
 export function latestDismissByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
-  const latest = new Map<string, UserFeedbackOut>();
-  for (const event of events) {
-    if (event.vote !== DISMISS_VOTE) {
-      continue;
-    }
-    const current = latest.get(event.recipeId);
-    if (!current || castAt(event) >= castAt(current)) {
-      latest.set(event.recipeId, event);
-    }
-  }
+  return newestByRecipe(events, event => event.vote === DISMISS_VOTE);
+}
 
-  return latest;
+/**
+ * The newest event of any kind per recipe: the log read as one timeline rather than as opinions
+ * and requests apart. It is what decides whether a recipe is hidden, and whether an "x" on it
+ * would say anything the log does not already say.
+ */
+export function latestEventByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
+  return newestByRecipe(events, () => true);
 }
 
 /**
@@ -89,20 +86,11 @@ export function latestDismissByRecipe(events: UserFeedbackOut[]): Map<string, Us
  * Three presses do that: "Not for me", "Find me a new one" and the "x". Each way the recipe stays in the
  * household's collection (a housemate may love it) but drops out of this person's view until
  * they undo the event or ask to see hidden recipes. A later up or neutral vote lifts it again,
- * and so does a later thumbs down being undone -- what hides is the newest event of any kind,
- * so the log is read as one timeline here rather than as opinions and requests apart.
+ * and so does a later thumbs down being undone -- what hides is the newest event of any kind.
  */
 export function hiddenRecipeIds(events: UserFeedbackOut[]): Set<string> {
-  const newest = new Map<string, UserFeedbackOut>();
-  for (const event of events) {
-    const current = newest.get(event.recipeId);
-    if (!current || castAt(event) >= castAt(current)) {
-      newest.set(event.recipeId, event);
-    }
-  }
-
   const hidden = new Set<string>();
-  for (const [recipeId, latest] of newest) {
+  for (const [recipeId, latest] of latestEventByRecipe(events)) {
     if (latest.vote === "down" || latest.vote === REFILL_VOTE || latest.vote === DISMISS_VOTE) {
       hidden.add(recipeId);
     }

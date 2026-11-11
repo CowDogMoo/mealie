@@ -166,7 +166,9 @@ class UserFeedbackController(BaseUserController):
         still reads exactly what the undone vote wrote, it is cleared, because the only reason it
         held that value was the vote being undone. A star that has since been set by hand to
         something else is not touched: a rating has no history, so there is nothing safer to put
-        back than what the person last chose.
+        back than what the person last chose. An event that wrote no star in the first place
+        (``neutral``, ``refill``, ``dismiss``) has none to take back, so undoing it leaves the
+        star exactly as it stands.
         """
 
         assert_user_change_allowed(id, self.user, self.user)
@@ -191,6 +193,10 @@ class UserFeedbackController(BaseUserController):
         writes when a person un-stars by hand, and upstream's aggregate treats both as unrated.
         """
 
+        written = VOTE_STAR_RATINGS.get(undone.vote)
+        if written is None:
+            return
+
         current = self.repos.user_ratings.get_by_user_and_recipe(user_id, undone.recipe_id)
         if current is None:
             return
@@ -203,7 +209,7 @@ class UserFeedbackController(BaseUserController):
 
         if implied is not None:
             new_rating: float = implied
-        elif current.rating == VOTE_STAR_RATINGS.get(undone.vote):
+        elif current.rating == written:
             new_rating = 0
         else:
             return

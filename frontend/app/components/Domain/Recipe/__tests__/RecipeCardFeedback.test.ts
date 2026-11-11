@@ -168,7 +168,7 @@ describe("RecipeCard feedback controls", () => {
     isOwnGroup.value = true;
     selfFeedback.value = [];
     setFeedback.mockReset();
-    setFeedback.mockResolvedValue(undefined);
+    setFeedback.mockResolvedValue({ response: { status: 201 } });
     alertSuccess.mockReset();
   });
 
@@ -193,6 +193,7 @@ describe("RecipeCard feedback controls", () => {
     expect(wrapper.findComponent(RecipeFeedbackButtons).exists()).toBe(false);
     expect(wrapper.find(THUMBS_UP).exists()).toBe(false);
     expect(wrapper.find(THUMBS_DOWN).exists()).toBe(false);
+    expect(wrapper.findComponent(VCardActions).classes()).not.toContain("recipe-feedback-row");
   });
 
   test("renders today's card when the prop is explicitly false", () => {
@@ -261,8 +262,10 @@ describe("RecipeCard feedback controls", () => {
     expect(html.indexOf("card-rating")).toBeLessThan(html.indexOf(feedback["thumbs-up"]));
     expect(html.indexOf(feedback["thumbs-up"])).toBeLessThan(html.indexOf("context-menu"));
 
-    // this card only renders on md-and-up grids, so the thumbs always take the compact size
+    // this card only renders on md-and-up grids, so the thumbs always take the compact size, and
+    // the row is marked for the packing that brings the favourite and the menu down to match
     expect(wrapper.findComponent(RecipeFeedbackButtons).props("small")).toBe(true);
     expect(wrapper.find(THUMBS_UP).classes()).toContain("v-btn--size-x-small");
+    expect(wrapper.findComponent(VCardActions).classes()).toContain("recipe-feedback-row");
   });
 });

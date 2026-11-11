@@ -847,6 +847,38 @@ def test_undoing_a_vote_leaves_a_star_set_by_hand_alone(
     assert self_rating(api_client, caster, recipe)["rating"] == 3
 
 
+@pytest.mark.parametrize("vote", ["neutral", "refill", "dismiss"])
+def test_undoing_an_event_that_wrote_no_star_leaves_a_star_set_by_hand_alone(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory, vote: str
+):
+    """Only a thumb writes a star, so only undoing a thumb may move one.
+
+    The up vote underneath still implies five stars, but it is not the event being undone: the
+    three the person chose by hand after it stays their last word.
+    """
+
+    caster = user_tuple[0]
+    recipe = recipe_factory(caster)
+
+    post_feedback(api_client, caster, recipe, vote="up")
+    response = api_client.post(
+        api_routes.users_id_ratings_slug(caster.user_id, recipe.slug),
+        json=UserRatingUpdate(rating=3).model_dump(),
+        headers=caster.token,
+    )
+    assert response.status_code == 200
+
+    separate_events()
+    event = post_feedback(api_client, caster, recipe, vote=vote)
+    assert self_rating(api_client, caster, recipe)["rating"] == 3
+
+    response = api_client.delete(
+        api_routes.users_id_feedback_event_id(caster.user_id, event["id"]), headers=caster.token
+    )
+    assert response.status_code == 200
+    assert self_rating(api_client, caster, recipe)["rating"] == 3
+
+
 def test_votes_set_the_caster_rating_only(
     api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
 ):

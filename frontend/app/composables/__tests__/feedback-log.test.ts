@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { hiddenRecipeIds, latestFeedbackByRecipe, latestRefillByRecipe } from "../use-users/feedback-log";
+import {
+  hiddenRecipeIds,
+  latestDismissByRecipe,
+  latestEventByRecipe,
+  latestFeedbackByRecipe,
+  latestRefillByRecipe,
+} from "../use-users/feedback-log";
 import type { UserFeedbackOut } from "~/lib/api/types/user";
 
 function event(overrides: Partial<UserFeedbackOut>): UserFeedbackOut {
@@ -202,5 +208,22 @@ describe("the x: removing a recipe from your list", () => {
     ]);
 
     expect(hidden.size).toBe(0);
+  });
+
+  test("the newest event of any kind is what the log says about a recipe now", () => {
+    const log = [
+      event({ id: "x", recipeId: "a", vote: "dismiss", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "up", recipeId: "a", vote: "up", createdAt: "2026-09-02T00:00:00" }),
+      event({ id: "ask", recipeId: "b", vote: "refill", createdAt: "2026-09-01T00:00:00" }),
+      event({ id: "x-again", recipeId: "b", vote: "dismiss", createdAt: "2026-09-03T00:00:00" }),
+    ];
+
+    const latest = latestEventByRecipe(log);
+    expect(latest.get("a")?.id).toBe("up");
+    expect(latest.get("b")?.id).toBe("x-again");
+
+    // the removal under the later up vote is still there to be listed and undone
+    expect(latestDismissByRecipe(log).get("a")?.id).toBe("x");
+    expect(latestDismissByRecipe(log).get("b")?.id).toBe("x-again");
   });
 });

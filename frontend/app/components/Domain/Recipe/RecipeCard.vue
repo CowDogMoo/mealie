@@ -61,6 +61,7 @@
             <v-card-actions
               v-if="showRecipeContent"
               class="recipe-card-actions px-1 py-0"
+              :class="{ 'recipe-feedback-row': showFeedbackControls }"
             >
               <RecipeFavoriteBadge
                 v-if="isOwnGroup"
@@ -75,8 +76,10 @@
               />
 
               <!--
-                Unlike RecipeCardMobile there is no width negotiation here: this card only renders
-                where the grid is md and up, so the row always has room for all four controls.
+                Unlike RecipeCardMobile the stars never step aside here. This card only renders
+                where the grid is md and up, and the narrowest one it draws there is 301px (three
+                to a row beside the sidebar at 1280px): the favourite, the stars, both thumbs, the
+                die, the x and the menu take 286px of it once `recipe-feedback-row` has packed them.
               -->
               <RecipeFeedbackButtons
                 v-if="showFeedbackControls"
