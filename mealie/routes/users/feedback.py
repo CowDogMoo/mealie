@@ -107,10 +107,11 @@ class UserFeedbackController(BaseUserController):
         """Record one feedback event on a recipe, plus the star rating that vote implies.
 
         A ``dismiss`` on a recipe whose newest event from this person is already a ``dismiss``
-        writes nothing and answers with the removal the log already holds. A second "x" says
-        nothing the first did not, and a second row would outlive the one undo that is meant to
-        bring the recipe back. The rule lives here because this log is the only one that is never
-        stale: a browser holds a copy, and a second tab or a failed refresh leaves that copy wrong.
+        writes nothing and answers with the removal the log already holds: a second "x" says
+        nothing the first did not. The rule lives here because this log is the only one that is
+        never stale: a browser holds a copy, and a second tab or a failed refresh leaves that copy
+        wrong. It does not keep two removals apart once a vote cast between them is undone;
+        ``delete_feedback`` is what makes one undo enough to bring the recipe back either way.
         """
 
         assert_user_change_allowed(id, self.user, self.user)
