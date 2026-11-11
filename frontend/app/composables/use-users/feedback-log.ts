@@ -12,8 +12,16 @@ function castAt(event: UserFeedbackOut): number {
  */
 export const REFILL_VOTE = "refill";
 
+/**
+ * The "x" on a recipe card. Mirrors `DISMISS_VOTE` in `mealie/schema/user/user_feedback.py`: "take
+ * this one off my list", with no reason and no star. Like a refill it is not an opinion, so it is
+ * never a person's current answer on a recipe; like a thumbs down it takes the recipe out of that
+ * person's grids, and the household's planner stops suggesting it.
+ */
+export const DISMISS_VOTE = "dismiss";
+
 export function isOpinion(event: UserFeedbackOut): boolean {
-  return event.vote !== REFILL_VOTE;
+  return event.vote !== REFILL_VOTE && event.vote !== DISMISS_VOTE;
 }
 
 /**
@@ -45,7 +53,25 @@ export function latestFeedbackByRecipe(events: UserFeedbackOut[]): Map<string, U
 export function latestRefillByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
   const latest = new Map<string, UserFeedbackOut>();
   for (const event of events) {
-    if (isOpinion(event)) {
+    if (event.vote !== REFILL_VOTE) {
+      continue;
+    }
+    const current = latest.get(event.recipeId);
+    if (!current || castAt(event) >= castAt(current)) {
+      latest.set(event.recipeId, event);
+    }
+  }
+
+  return latest;
+}
+
+/**
+ * The newest "x" per recipe, so the page can list what a person removed and undo it.
+ */
+export function latestDismissByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
+  const latest = new Map<string, UserFeedbackOut>();
+  for (const event of events) {
+    if (event.vote !== DISMISS_VOTE) {
       continue;
     }
     const current = latest.get(event.recipeId);
@@ -60,7 +86,7 @@ export function latestRefillByRecipe(events: UserFeedbackOut[]): Map<string, Use
 /**
  * The recipes a person has taken out of their own grids.
  *
- * Two presses do that: "Not for me" and "Find me a new one". Either way the recipe stays in the
+ * Three presses do that: "Not for me", "Find me a new one" and the "x". Each way the recipe stays in the
  * household's collection (a housemate may love it) but drops out of this person's view until
  * they undo the event or ask to see hidden recipes. A later up or neutral vote lifts it again,
  * and so does a later thumbs down being undone -- what hides is the newest event of any kind,
@@ -77,7 +103,7 @@ export function hiddenRecipeIds(events: UserFeedbackOut[]): Set<string> {
 
   const hidden = new Set<string>();
   for (const [recipeId, latest] of newest) {
-    if (latest.vote === "down" || latest.vote === REFILL_VOTE) {
+    if (latest.vote === "down" || latest.vote === REFILL_VOTE || latest.vote === DISMISS_VOTE) {
       hidden.add(recipeId);
     }
   }

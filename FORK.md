@@ -143,6 +143,16 @@ TypeScript copy, with a test that fails if the two drift. The upstream edits are
 `below-toolbar` slot in `RecipeCardSection.vue`, the bar in that slot on
 `RecipeExplorerPage.vue`, and the usual model, repository, router and client registrations.
 
+**An x.** Beside the thumbs and the die, every card carries an "x": take this recipe off my list
+without saying anything about it. It posts a `dismiss` event (`DISMISS_VOTE` in
+`mealie/schema/user/user_feedback.py`) through the same `POST /api/users/{id}/feedback/{slug}`
+as a vote. It asks for no reason, writes no star and moves no thumb; the recipe leaves the
+presser's own grids the way a thumbs-down does, My Recipe Feedback lists it under "Removed" where
+it can be undone, and the planner skill reads it from the household feed and stops suggesting the
+recipe. **The planner must know the vote before the fork ships it**: `history.mjs` throws on a
+vote it has never heard of, so a `dismiss` event reaching an old runner fails every sync tick.
+Deploy the runner first.
+
 **Pantry staples.** A household marks the foods it usually has -- salt, sugar, olive oil -- and
 recipes leave them off the shopping list. There is no new storage: a staple is upstream's
 per-household "on hand" flag (`households_to_ingredient_foods`), which the shopping list service
