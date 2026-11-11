@@ -168,7 +168,7 @@ def server_zone() -> ZoneInfo:
         "Whoever runs it needs to set TZ to the household's time zone, such as America/Denver, "
         "before the plan can be synced."
     )
-    name = os.environ.get("TZ", "").strip().removeprefix(":")
+    name = os.environ.get("TZ", "").removeprefix(":")
     if not name:
         raise CalendarSyncTimeZoneError(f"This server has no time zone: TZ is not set. {fix}")
 

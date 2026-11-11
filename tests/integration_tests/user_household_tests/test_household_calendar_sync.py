@@ -669,6 +669,7 @@ def test_a_refused_credential_is_recorded_without_any_of_the_key(
         ("", "TZ is not set"),
         ("Not/A_Zone", "TZ is 'Not/A_Zone'"),
         ("MST7MDT,M3.2.0,M11.1.0", "TZ is 'MST7MDT,M3.2.0,M11.1.0'"),
+        (" America/Denver ", "TZ is ' America/Denver '"),
     ],
 )
 def test_a_server_without_a_usable_time_zone_changes_nothing_and_says_why(

@@ -413,14 +413,14 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
     assert result.model_dump() == {"created": 1, "updated": 0, "deleted": 1}
 
 
-@pytest.mark.parametrize("named", ["America/Denver", ":America/Denver", "  America/Denver  "])
+@pytest.mark.parametrize("named", ["America/Denver", ":America/Denver"])
 def test_the_servers_zone_is_the_one_tz_names(monkeypatch: pytest.MonkeyPatch, named: str):
     monkeypatch.setenv("TZ", named)
 
     assert server_zone() == DENVER
 
 
-@pytest.mark.parametrize("unset", [None, "", "   ", ":"])
+@pytest.mark.parametrize("unset", [None, "", ":"])
 def test_a_server_without_a_tz_has_no_zone_and_says_so(monkeypatch: pytest.MonkeyPatch, unset: str | None):
     if unset is None:
         monkeypatch.delenv("TZ", raising=False)
@@ -437,7 +437,18 @@ def test_a_server_without_a_tz_has_no_zone_and_says_so(monkeypatch: pytest.Monke
         window_start()
 
 
-@pytest.mark.parametrize("invalid", ["Not/A_Zone", "America/Denvr", "MST7MDT,M3.2.0,M11.1.0", "/etc/localtime"])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "Not/A_Zone",
+        "America/Denvr",
+        "MST7MDT,M3.2.0,M11.1.0",
+        "/etc/localtime",
+        " America/Denver ",
+        "America/Denver ",
+        " ",
+    ],
+)
 def test_a_tz_that_names_no_zone_is_refused_by_name(monkeypatch: pytest.MonkeyPatch, invalid: str):
     monkeypatch.setenv("TZ", invalid)
 
