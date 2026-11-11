@@ -11,6 +11,11 @@ window are ever changed or removed. Older events stay as they were: a record of 
 "Yesterday" rather than "today" so that a server whose clock is hours ahead of the kitchen does
 not stop caring about tonight's dinner in the middle of the afternoon.
 
+**When.** A dinner is a timed event, six to eight in the evening in the server's time zone; any
+other meal is an all-day event. Both are marked as not blocking anyone's time. The zone is the one
+the server's `TZ` names. Without one a sync changes nothing and records why: six o'clock somewhere
+else is worse than no dinner on the calendar.
+
 **What is never touched.** An event without this household's private property. The calendar is a
 shared, human calendar; the mirror owns only what it wrote.
 
@@ -22,13 +27,14 @@ after everything that asked. The lock is in this process only. If two processes 
 the reconcile's removal of duplicate events for one entry is what puts it right, on the next run.
 """
 
+import os
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from dateutil.tz import tzlocal
 from pydantic import UUID4
 
 from mealie.core.root_logger import get_logger
@@ -91,8 +97,13 @@ class CalendarUnreachableError(CalendarSyncError):
     """The calendar a household wants to enable cannot be opened, or cannot be written to."""
 
 
+class CalendarSyncTimeZoneError(CalendarSyncError):
+    """The server's `TZ` names no time zone, so there is no telling when six in the evening is."""
+
+
 class CalendarSyncFailedError(CalendarSyncError):
-    """A sync was attempted and Google, or the road to it, failed. Already recorded on the row."""
+    """A sync was attempted and could not be done: Google, or the road to it, failed, or the server
+    has no time zone. Already recorded on the row."""
 
 
 class HouseholdSyncGate:
@@ -144,10 +155,33 @@ sync_gate = HouseholdSyncGate()
 """The process-wide gate every trigger goes through."""
 
 
+def server_zone() -> ZoneInfo:
+    """The time zone a dinner's six o'clock is in: the server's, which is the household's.
+
+    Mealie keeps no time zone per household, so the server's `TZ` has to name the household's, as
+    an IANA zone like America/Denver. That zone is used and named on the event. A `TZ` that is
+    unset, or names no such zone, is refused: a container without one is on UTC, and nothing here
+    guesses where the kitchen is.
+    """
+
+    fix = (
+        "Whoever runs it needs to set TZ to the household's time zone, such as America/Denver, "
+        "before the plan can be synced."
+    )
+    name = os.environ.get("TZ", "").removeprefix(":")
+    if not name:
+        raise CalendarSyncTimeZoneError(f"This server has no time zone: TZ is not set. {fix}")
+
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, OSError) as e:
+        raise CalendarSyncTimeZoneError(f"This server's TZ is {name!r}, which is not a time zone. {fix}") from e
+
+
 def window_start(today: date | None = None) -> date:
     """The first day the mirror covers."""
 
-    today = today or datetime.now(tzlocal()).date()
+    today = today or datetime.now(server_zone()).date()
     return today - timedelta(days=WINDOW_LOOKBACK_DAYS)
 
 
@@ -157,11 +191,13 @@ def reconcile(
     household_id: str,
     desired: dict[str, dict[str, Any]],
     first_day: date,
+    zone: tzinfo,
 ) -> CalendarSyncResult:
     """Make the calendar's events for this household equal `desired`, keyed by plan entry id.
 
     Adds what is missing, patches what no longer matches, and deletes events whose entry is gone
-    along with any second event for an entry that already has one.
+    along with any second event for an entry that already has one. `zone` is the zone the desired
+    events were written in; a timed event's day is read there.
     """
 
     ends_after = datetime.combine(first_day - timedelta(days=LIST_MARGIN_DAYS), time.min, tzinfo=UTC)
@@ -175,7 +211,7 @@ def reconcile(
             continue
 
         entry_id = entry_id_of(event)
-        if entry_id not in desired and (start_date_of(event) or "") < first_day.isoformat():
+        if entry_id not in desired and (start_date_of(event, zone) or "") < first_day.isoformat():
             # before the window and not wanted in it: a dinner that was eaten. Leave it be.
             continue
 
@@ -337,14 +373,15 @@ class CalendarSyncService(BaseService):
     def sync(self) -> CalendarSyncResult:
         """Sync now, for a person waiting on the answer. Waits for a running sync to finish first.
 
-        Raises when the household or the server is not set up, and when Google fails.
+        Raises when the household or the server is not set up, and when the sync itself fails
+        (`CalendarSyncFailedError`).
         """
 
         row, credentials = self._ready()
         return sync_gate.wait_turn(self.household_id, lambda: self._sync(row, credentials))
 
     def sync_if_enabled(self) -> CalendarSyncResult | None:
-        """Sync if this household mirrors its plan, and never raise over Google.
+        """Sync if this household mirrors its plan, and never raise over a sync that fails.
 
         For the triggers nobody is waiting on. A household that is not set up is simply skipped,
         without a call to Google; a failure is recorded on the row and reported as None. The
@@ -361,7 +398,7 @@ class CalendarSyncService(BaseService):
         except CalendarSyncFailedError:
             return None
 
-    def _desired_events(self, first_day: date) -> dict[str, dict[str, Any]]:
+    def _desired_events(self, first_day: date, zone: ZoneInfo) -> dict[str, dict[str, Any]]:
         entries = self.repos.meals.page_all(
             PaginationQuery(page=1, per_page=-1, query_filter=f"date >= {first_day.isoformat()}")
         ).items
@@ -371,18 +408,23 @@ class CalendarSyncService(BaseService):
 
         return {
             str(entry.id): event_body(
-                entry, household_id=self.household_id, base_url=self.settings.BASE_URL, group_slug=group_slug
+                entry,
+                household_id=self.household_id,
+                base_url=self.settings.BASE_URL,
+                group_slug=group_slug,
+                zone=zone,
             )
             for entry in entries
         }
 
     def _sync(self, row: CalendarSyncOut, credentials: GoogleCredentials) -> CalendarSyncResult:
         try:
+            zone = server_zone()
             first_day = window_start()
-            desired = self._desired_events(first_day)
+            desired = self._desired_events(first_day, zone)
             with google_client.open_client(credentials) as calendar:
-                result = reconcile(calendar, row.calendar_id or "", self.household_id, desired, first_day)
-        except (GoogleAuthError, GoogleCalendarError) as e:
+                result = reconcile(calendar, row.calendar_id or "", self.household_id, desired, first_day, zone)
+        except (GoogleAuthError, GoogleCalendarError, CalendarSyncTimeZoneError) as e:
             reason = _one_line(str(e))
             self.logger.warning("calendar sync failed for household %s: %s", self.household_id, reason)
             self.rows.patch(row.id, {"last_error": reason})

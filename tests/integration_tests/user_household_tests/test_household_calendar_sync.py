@@ -21,8 +21,9 @@ both mirrors off on the way in and on the way out.
 """
 
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -51,12 +52,25 @@ OTHER_CALENDAR = "someone-elses@group.calendar.google.com"
 HOUSEHOLD_PROPERTY = "mealieHousehold"
 ENTRY_PROPERTY = "mealieEntry"
 
-# a day comfortably inside the mirror's window, whatever the server's clock and time zone
-DAY = window_start() + timedelta(days=3)
+# the zone the server is told it is in: `clean_slate` sets `TZ` to it for every test
+ZONE = ZoneInfo("America/Denver")
+
+# a day comfortably inside the mirror's window, whatever the server's clock
+DAY = window_start(datetime.now(ZONE).date()) + timedelta(days=3)
 
 
 def day(offset: int = 0) -> str:
     return (DAY + timedelta(days=offset)).isoformat()
+
+
+def dinner_time(offset: int = 0) -> tuple[dict, dict]:
+    """The start and end a dinner's event should have: six to eight that evening, server time."""
+
+    def edge(hour: int) -> dict:
+        at = datetime.combine(DAY + timedelta(days=offset), time(hour), tzinfo=ZONE)
+        return {"dateTime": at.isoformat(), "timeZone": "America/Denver"}
+
+    return edge(18), edge(20)
 
 
 def status(api_client: TestClient, user: TestUser) -> dict:
@@ -138,6 +152,7 @@ def clean_slate(api_client: TestClient, unique_user: TestUser, h2_user: TestUser
     # default-deny: no credentials and no way out unless a test takes the `google` fixture
     monkeypatch.setattr(google_credentials, "load_credentials", lambda: None)
     monkeypatch.setattr(google_client, "build_http_client", _no_network)
+    monkeypatch.setenv("TZ", ZONE.key)
     google_credentials.token_cache.clear()
 
     def reset() -> None:
@@ -358,8 +373,7 @@ def test_creating_updating_and_deleting_an_entry_is_mirrored(
     [event] = mirrored.events(CALENDAR)
     assert event["summary"] == f"Dinner: {recipe['name']}"
     assert event["description"] == f"Double it\n\n{link}"
-    assert event["start"] == {"date": day()}
-    assert event["end"] == {"date": day(1)}
+    assert (event["start"], event["end"]) == dinner_time(), "a dinner is on the calendar from six to eight"
     assert event["transparency"] == "transparent"
     assert event["source"] == {"title": recipe["name"], "url": link}
     assert event["extendedProperties"] == {
@@ -408,7 +422,9 @@ def test_a_whole_week_replaced_in_a_burst_ends_up_equal_to_the_plan(
 
     events = mirrored.events(CALENDAR)
     assert sorted(event["summary"] for event in events) == sorted(f"Dinner: new {offset}" for offset in range(7))
-    assert sorted(event["start"]["date"] for event in events) == [day(offset) for offset in range(7)]
+    assert sorted(event["start"]["dateTime"] for event in events) == [
+        dinner_time(offset)[0]["dateTime"] for offset in range(7)
+    ]
 
 
 def test_sync_now_reports_what_changed_and_a_second_sync_changes_nothing(
@@ -453,6 +469,35 @@ def test_a_duplicate_event_for_one_entry_is_removed(
     assert kept["id"] == original["id"], "the older event is the one kept"
     assert kept["id"] != duplicate["id"]
     assert kept["summary"] == "Dinner: Lentil Tacos"
+
+
+def test_a_dinner_written_as_an_all_day_event_becomes_six_to_eight_without_a_second_event(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    lunch = plan(api_client, unique_user, day(), title="Soup", entryType="lunch")
+    by_entry = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in mirrored.events(CALENDAR)}
+    written = by_entry[str(entry["id"])]
+
+    # what a sync from before dinners had an hour left on the calendar
+    mirrored.calendars[CALENDAR][written["id"]] |= {"start": {"date": day()}, "end": {"date": day(1)}}
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    after = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in mirrored.events(CALENDAR)}
+    assert len(mirrored.events(CALENDAR)) == 2, "converted in place: no second event for the dinner"
+    converted = after[str(entry["id"])]
+    assert converted["id"] == written["id"]
+    assert (converted["start"], converted["end"]) == dinner_time()
+    assert converted["transparency"] == "transparent"
+    assert converted["extendedProperties"] == written["extendedProperties"]
+
+    # the lunch is as it always was: all day
+    assert after[str(lunch["id"])] == by_entry[str(lunch["id"])]
+    assert after[str(lunch["id"])]["start"] == {"date": day()}
+    assert after[str(lunch["id"])]["end"] == {"date": day(1)}
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
 
 
 def test_an_event_without_this_households_mark_is_never_touched(
@@ -615,6 +660,66 @@ def test_a_refused_credential_is_recorded_without_any_of_the_key(
     )
     for line in private_key_pem().splitlines():
         assert line not in response.text
+
+
+@pytest.mark.parametrize(
+    ("tz", "named"),
+    [
+        (None, "TZ is not set"),
+        ("", "TZ is not set"),
+        ("Not/A_Zone", "TZ is 'Not/A_Zone'"),
+        ("MST7MDT,M3.2.0,M11.1.0", "TZ is 'MST7MDT,M3.2.0,M11.1.0'"),
+        (" America/Denver ", "TZ is ' America/Denver '"),
+    ],
+)
+def test_a_server_without_a_usable_time_zone_changes_nothing_and_says_why(
+    api_client: TestClient,
+    unique_user: TestUser,
+    mirrored: FakeGoogleCalendar,
+    monkeypatch: pytest.MonkeyPatch,
+    tz: str | None,
+    named: str,
+):
+    stays = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    goes = plan(api_client, unique_user, day(1), title="Fish Pie")
+    by_entry = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in mirrored.events(CALENDAR)}
+
+    # an all-day dinner from an older version: the next sync would give it its hours
+    old = by_entry[str(stays["id"])]
+    mirrored.calendars[CALENDAR][old["id"]] |= {"start": {"date": day()}, "end": {"date": day(1)}}
+    before = mirrored.events(CALENDAR)
+    asked = mirrored.request_count
+
+    if tz is None:
+        monkeypatch.delenv("TZ")
+    else:
+        monkeypatch.setenv("TZ", tz)
+
+    # every trigger there is: a plan change that would add an event, one that would delete one,
+    # the hourly sweep, and somebody asking. `plan` and `unplan` assert the plan change succeeds.
+    added = plan(api_client, unique_user, day(2), title="Chili")
+    unplan(api_client, unique_user, goes["id"])
+    sync_google_calendars()
+    refused = sync_now(api_client, unique_user, expected_status=502)
+
+    said = status(api_client, unique_user)["lastError"]
+    assert named in said
+    assert "America/Denver" in said, "the page says what TZ should be set to"
+    assert refused["detail"]["message"] == said
+
+    # nothing written, patched or deleted, and Google not so much as asked
+    assert mirrored.events(CALENDAR) == before
+    assert mirrored.request_count == asked
+
+    # with the zone back, the next sync does everything that was held up
+    monkeypatch.setenv("TZ", ZONE.key)
+    assert sync_now(api_client, unique_user) == {"created": 1, "updated": 1, "deleted": 1}
+
+    assert status(api_client, unique_user)["lastError"] is None
+    after = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in mirrored.events(CALENDAR)}
+    assert set(after) == {str(stays["id"]), str(added["id"])}
+    assert (after[str(stays["id"])]["start"], after[str(stays["id"])]["end"]) == dinner_time()
+    assert (after[str(added["id"])]["start"], after[str(added["id"])]["end"]) == dinner_time(2)
 
 
 def test_the_hourly_sweep_heals_a_sync_that_failed(
