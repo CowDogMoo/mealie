@@ -10,6 +10,7 @@ from mealie.db.models.group import Group, ReportEntryModel, ReportModel
 from mealie.db.models.group.ai_providers import AIProvider, AIProviderSettings
 from mealie.db.models.group.exports import GroupDataExportsModel
 from mealie.db.models.group.preferences import GroupPreferencesModel
+from mealie.db.models.household.calendar_sync import HouseholdCalendarSyncModel
 from mealie.db.models.household.cookbook import CookBook
 from mealie.db.models.household.events import GroupEventNotifierModel
 from mealie.db.models.household.household import Household
@@ -51,6 +52,7 @@ from mealie.schema.cookbook.cookbook import ReadCookBook
 from mealie.schema.group.ai_providers import AIProviderOut, AIProviderSettingsOut
 from mealie.schema.group.group_exports import GroupDataExport
 from mealie.schema.group.group_preferences import ReadGroupPreferences
+from mealie.schema.household.calendar_sync import CalendarSyncOut
 from mealie.schema.household.group_events import GroupEventNotifierOut
 from mealie.schema.household.group_recipe_action import GroupRecipeActionOut
 from mealie.schema.household.group_shopping_list import (
@@ -463,6 +465,17 @@ class AllRepositories:
             PK_ID,
             GroupEventNotifierModel,
             GroupEventNotifierOut,
+            group_id=self.group_id,
+            household_id=self.household_id,
+        )
+
+    @cached_property
+    def calendar_sync(self) -> HouseholdRepositoryGeneric[CalendarSyncOut, HouseholdCalendarSyncModel]:
+        return HouseholdRepositoryGeneric(
+            self.session,
+            PK_ID,
+            HouseholdCalendarSyncModel,
+            CalendarSyncOut,
             group_id=self.group_id,
             household_id=self.household_id,
         )

@@ -10,6 +10,7 @@ from mealie.db.models.recipe.labels import MultiPurposeLabel
 from .._model_base import BaseMixins, FilterableColumn, SqlAlchemyBase
 from .._model_utils.auto_init import auto_init
 from .._model_utils.guid import GUID
+from ..household.calendar_sync import HouseholdCalendarSyncModel
 from ..household.cookbook import CookBook
 from ..household.invite_tokens import GroupInviteToken
 from ..household.mealplan import GroupMealPlan
@@ -83,6 +84,9 @@ class Group(SqlAlchemyBase, BaseMixins):
     recipe_requests: Mapped[list[HouseholdRecipeRequestModel]] = orm.relationship(
         HouseholdRecipeRequestModel, **common_args
     )
+    calendar_syncs: Mapped[list[HouseholdCalendarSyncModel]] = orm.relationship(
+        HouseholdCalendarSyncModel, **common_args
+    )
     recipe_actions: Mapped[list["GroupRecipeAction"]] = orm.relationship("GroupRecipeAction", **common_args)
     cookbooks: Mapped[list[CookBook]] = orm.relationship(CookBook, **common_args)
     server_tasks: Mapped[list["ServerTaskModel"]] = orm.relationship("ServerTaskModel", **common_args)
@@ -105,6 +109,7 @@ class Group(SqlAlchemyBase, BaseMixins):
             "webhooks",
             "recipe_sources",
             "recipe_requests",
+            "calendar_syncs",
             "recipe_actions",
             "shopping_lists",
             "cookbooks",

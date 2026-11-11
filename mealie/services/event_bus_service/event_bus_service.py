@@ -6,6 +6,7 @@ from mealie.core.config import get_app_settings
 from mealie.db.db_setup import generate_session
 from mealie.repos.all_repositories import get_repositories
 from mealie.schema.response.pagination import PaginationQuery
+from mealie.services.event_bus_service.calendar_sync_listener import CalendarSyncEventListener
 from mealie.services.event_bus_service.event_bus_listeners import (
     AppriseEventListener,
     EventListenerBase,
@@ -55,6 +56,7 @@ class EventBusService:
         return [
             AppriseEventListener(group_id, household_id),
             WebhookEventListener(group_id, household_id),
+            CalendarSyncEventListener(group_id, household_id),
         ]
 
     def _publish_event(self, event: Event, group_id: UUID4, household_id: UUID4) -> None:

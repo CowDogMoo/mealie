@@ -9,6 +9,42 @@ export type GroupRecipeActionType = "link" | "post";
 export type WebhookType = "mealplan";
 export type RecipeSourceStatus = "known-good" | "caution" | "blocked";
 
+export interface CalendarSyncOut {
+  calendarId?: string | null;
+  enabled?: boolean;
+  groupId: string;
+  householdId: string;
+  lastSyncedAt?: string | null;
+  lastError?: string | null;
+  id: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+export interface CalendarSyncResult {
+  created?: number;
+  updated?: number;
+  deleted?: number;
+}
+export interface CalendarSyncSave {
+  calendarId?: string | null;
+  enabled?: boolean;
+  groupId: string;
+  householdId: string;
+  lastSyncedAt?: string | null;
+  lastError?: string | null;
+}
+export interface CalendarSyncStatus {
+  configured?: boolean;
+  accountEmail?: string | null;
+  calendarId?: string | null;
+  enabled?: boolean;
+  lastSyncedAt?: string | null;
+  lastError?: string | null;
+}
+export interface CalendarSyncUpdate {
+  calendarId?: string | null;
+  enabled?: boolean;
+}
 export interface CartRequestOut {
   shoppingListId: string;
   shoppingListName?: string | null;
