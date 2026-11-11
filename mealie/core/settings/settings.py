@@ -31,6 +31,26 @@ class ScraperProxyMode(StrEnum):
         return cls.always
 
 
+class MealPlanCalendarView(StrEnum):
+    """Which calendar the meal plan page shows (fork; see FORK.md)."""
+
+    mealie = "mealie"
+    """Mealie's own calendar."""
+    google = "google"
+    """The household's linked Google calendar, through Google's embed. A household without a
+    linked calendar still sees Mealie's own."""
+
+    @classmethod
+    def _missing_(cls, value: object) -> "MealPlanCalendarView":
+        # A value in another case is still that value; anything unrecognized is Mealie's own
+        # calendar, so a typo cannot take the meal plan page away.
+        if isinstance(value, str):
+            for member in cls:
+                if member.value == value.strip().lower():
+                    return member
+        return cls.mealie
+
+
 class ScheduleTime(NamedTuple):
     hour: int
     minute: int
@@ -510,6 +530,11 @@ class AppSettings(AppLoggingSettings):
     GOOGLE_CALENDAR_CREDENTIALS: MaskedNoneString = None
     """The JSON of a Google service-account key, as one string.
     When set, a household can mirror its meal plan to a Google calendar. Unset disables it."""
+
+    MEAL_PLAN_CALENDAR_VIEW: MealPlanCalendarView = MealPlanCalendarView.mealie
+    """Which calendar the meal plan page shows: `mealie` for Mealie's own, or `google` for the
+    household's linked Google calendar, embedded. Nothing is read from Google by the server either
+    way; the embed is loaded by the viewer's browser."""
 
 
 def app_settings_constructor(data_dir: Path, production: bool, env_file: Path, env_encoding="utf-8") -> AppSettings:

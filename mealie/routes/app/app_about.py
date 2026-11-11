@@ -44,6 +44,7 @@ def get_app_info(session: Session = Depends(generate_session)):
         allow_password_login=settings.ALLOW_PASSWORD_LOGIN,
         token_time=settings.TOKEN_TIME,
         allowed_iframe_hosts=settings.allowed_iframe_hosts,
+        meal_plan_calendar_view=settings.MEAL_PLAN_CALENDAR_VIEW,
     )
 
 

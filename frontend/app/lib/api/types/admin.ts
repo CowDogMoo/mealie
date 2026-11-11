@@ -5,6 +5,8 @@
 /* Do not modify it by hand - just update the pydantic models and then re-run the script
 */
 
+export type MealPlanCalendarView = "mealie" | "google";
+
 export interface AdminAboutInfo {
   production: boolean;
   version: string;
@@ -18,6 +20,7 @@ export interface AdminAboutInfo {
   oidcProviderName: string;
   tokenTime: number;
   allowedIframeHosts?: string[];
+  mealPlanCalendarView?: MealPlanCalendarView;
   versionLatest: string;
   apiPort: number;
   apiDocs: boolean;
@@ -50,6 +53,7 @@ export interface AppInfo {
   oidcProviderName: string;
   tokenTime: number;
   allowedIframeHosts?: string[];
+  mealPlanCalendarView?: MealPlanCalendarView;
 }
 export interface AppStartupInfo {
   isFirstLogin: boolean;

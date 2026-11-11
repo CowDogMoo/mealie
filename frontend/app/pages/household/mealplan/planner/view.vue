@@ -1,6 +1,34 @@
 <template>
   <v-container class="mx-0 my-3">
-    <v-row>
+    <v-progress-linear
+      v-if="view === 'loading'"
+      indeterminate
+      color="primary"
+    />
+    <GroupMealPlanGoogleCalendar
+      v-else-if="view === 'google' && calendarId"
+      :calendar-id="calendarId"
+    />
+    <v-alert
+      v-if="view === 'unlinked'"
+      type="info"
+      variant="tonal"
+      density="compact"
+      class="mb-4"
+      data-testid="mealplan-google-calendar-unlinked"
+    >
+      {{ $t('calendar-sync.view-not-linked') }}
+      <NuxtLink
+        to="/household/google-calendar"
+        data-testid="mealplan-google-calendar-link"
+      >
+        {{ $t('calendar-sync.view-link-calendar') }}
+      </NuxtLink>
+    </v-alert>
+    <v-row
+      v-if="view === 'mealie' || view === 'unlinked'"
+      data-testid="mealplan-mealie-calendar"
+    >
       <v-col
         v-for="(day, index) in plan"
         :key="index"
@@ -57,7 +85,9 @@ import { isSameDay } from "date-fns";
 
 import type { PlanEntryType, ReadPlanEntry } from "~/lib/api/types/meal-plan";
 import { usePlanTypeOptions } from "~/composables/use-group-mealplan";
+import { useMealPlanCalendarView } from "~/composables/use-meal-plan-calendar-view";
 import GroupMealPlanDayContextMenu from "~/components/Domain/Household/GroupMealPlanDayContextMenu.vue";
+import GroupMealPlanGoogleCalendar from "~/components/Domain/Household/GroupMealPlanGoogleCalendar.vue";
 import RecipeCardMobile from "~/components/Domain/Recipe/RecipeCardMobile.vue";
 import type { RecipeSummary } from "~/lib/api/types/recipe";
 
@@ -84,6 +114,11 @@ type Days = {
 
 const i18n = useI18n();
 const planTypeOptions = usePlanTypeOptions();
+
+// The server's MEAL_PLAN_CALENDAR_VIEW setting decides between Mealie's own calendar (below) and
+// the household's linked Google calendar. Everything that changes the plan lives on the Edit tab
+// and in the buttons above this page, which stay put either way.
+const { view, calendarId } = useMealPlanCalendarView();
 
 const plan = computed<Days[]>(() => {
   return props.mealplans.map((day) => {

@@ -1,3 +1,4 @@
+from mealie.core.settings.settings import MealPlanCalendarView
 from mealie.schema._mealie import MealieModel
 
 
@@ -23,6 +24,8 @@ class AppInfo(MealieModel):
     oidc_provider_name: str
     token_time: int
     allowed_iframe_hosts: list[str] = []
+    meal_plan_calendar_view: MealPlanCalendarView = MealPlanCalendarView.mealie
+    """Which calendar the meal plan page shows (`MEAL_PLAN_CALENDAR_VIEW`)."""
 
 
 class AppTheme(MealieModel):

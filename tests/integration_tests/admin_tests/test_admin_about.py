@@ -33,6 +33,35 @@ def test_public_about_get_app_info(
         assert as_dict["defaultGroupSlug"] == group.slug
 
 
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [(None, "mealie"), ("mealie", "mealie"), ("google", "google"), ("not-a-view", "mealie")],
+    ids=["unset", "mealie", "google", "unrecognized"],
+)
+def test_about_reports_meal_plan_calendar_view(
+    api_client: TestClient,
+    admin_user: TestUser,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: str | None,
+    expected: str,
+):
+    if configured is None:
+        monkeypatch.delenv("MEAL_PLAN_CALENDAR_VIEW", raising=False)
+    else:
+        monkeypatch.setenv("MEAL_PLAN_CALENDAR_VIEW", configured)
+    get_app_settings.cache_clear()
+
+    try:
+        public = api_client.get(api_routes.app_about)
+        admin = api_client.get(api_routes.admin_about, headers=admin_user.token)
+    finally:
+        monkeypatch.undo()
+        get_app_settings.cache_clear()
+
+    assert public.json()["mealPlanCalendarView"] == expected
+    assert admin.json()["mealPlanCalendarView"] == expected
+
+
 def test_admin_about_get_app_info(api_client: TestClient, admin_user: TestUser):
     response = api_client.get(api_routes.admin_about, headers=admin_user.token)
 

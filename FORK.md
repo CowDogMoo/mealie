@@ -228,6 +228,46 @@ Turning it on is three steps, and only the first needs whoever runs the server:
 3. On `/household/google-calendar`, paste the calendar's id (Settings > Integrate calendar), switch
    the mirror on, save, and press "Sync now" to fill the calendar straight away.
 
+**Showing the Google calendar in place of Mealie's.** One more server setting,
+`MEAL_PLAN_CALENDAR_VIEW`, picks which calendar the meal plan page
+(`/household/mealplan/planner/view`) shows:
+
+| Value              | What the page shows                                                           |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `mealie` (default) | Mealie's own calendar, as before                                               |
+| `google`           | The household's linked Google calendar, through Google's own embed, in its place |
+
+It is read from the environment like every other setting, case does not matter, and a value that
+is neither falls back to `mealie`, so a typo cannot take the page away. `/api/app/about` (and the
+admin one) report it as `mealPlanCalendarView`, which is how the frontend learns it. With `google`,
+the page asks `GET /api/households/calendar-sync` whether the viewer's household has a calendar to
+show, which means all three of: the server has `GOOGLE_CALENDAR_CREDENTIALS`, a calendar id is
+saved, and the mirror is switched on. A calendar nobody is keeping up to date does not count. If
+so, the page puts an `<iframe>` of `https://calendar.google.com/calendar/embed` there, with the
+calendar's id, the viewer's browser time zone (Mealie keeps none for a household) and the
+household's first day of the week. If not, it shows Mealie's own calendar under a one-line note
+that links to `/household/google-calendar`. Three things to know:
+
+- **Google decides who can see it.** The embed is loaded by the viewer's browser with the
+  viewer's own Google sign-in, so a calendar that is not public shows only to people it is shared
+  with, signed in to Google in that browser, and only where the browser lets an embedded page use
+  its Google cookies (one that blocks third-party cookies will show Google's sign-in or an empty
+  calendar instead). The service account plays no part in viewing, and the server reads nothing
+  from Google for this. The mirror is still one way.
+- **Only the calendar is swapped.** The date range, "Add all to list", the Edit tab (adding,
+  editing, randomizing) and the settings link are the planner page around it and stay as they
+  were; the plan is still changed in Mealie and the calendar follows. What the Google view does
+  not have is the per-day menu and the thumbs on each card, which belong to Mealie's own cards.
+- **No header had to change.** Mealie sends no `Content-Security-Policy`, and neither the
+  backend's SPA routes nor the Nuxt config restrict frames, so the embed loads as it is.
+  `ALLOWED_IFRAME_HOSTS` is about `<iframe>` tags in user-written recipe text and is not involved;
+  `calendar.google.com` was not added to it. A reverse proxy that adds its own CSP needs
+  `frame-src https://calendar.google.com`.
+
+The pieces are `MealPlanCalendarView` in `core/settings/settings.py`, the field on `AppInfo`,
+`composables/use-meal-plan-calendar-view.ts` (the decision and the embed address),
+`<GroupMealPlanGoogleCalendar>` (the frame) and a few lines at the top of the planner's `view.vue`.
+
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
 already reads ≤2 as a dislike and ≥4 as a like, so nothing downstream had to change on day
@@ -246,16 +286,22 @@ mealie/repos/repository_recipes.py
 mealie/repos/repository_shopping_list.py
 mealie/repos/repository_users.py
 mealie/repos/repository_factory.py
+mealie/routes/admin/admin_about.py
+mealie/routes/app/app_about.py
 mealie/routes/users/__init__.py
 mealie/routes/households/__init__.py
 mealie/routes/unit_and_foods/foods.py
 mealie/services/backups_v2/alchemy_exporter.py
 mealie/services/event_bus_service/event_bus_service.py
 mealie/services/household_services/shopping_lists.py
+mealie/schema/admin/about.py
 mealie/schema/household/__init__.py
 mealie/schema/recipe/__init__.py
 mealie/schema/user/__init__.py
 tests/utils/api_routes/__init__.py
+tests/integration_tests/admin_tests/test_admin_about.py
+tests/unit_tests/test_config.py
+frontend/app/lib/api/types/admin.ts
 frontend/app/lib/api/types/household.ts
 frontend/app/lib/api/types/meal-plan.ts
 frontend/app/lib/api/types/recipe.ts
@@ -307,16 +353,22 @@ column name, so a datetime column missing from that set comes back from a backup
 imported straight from its own module so that `services/scheduler/tasks/__init__.py` stays
 upstream's.
 
+**`MEAL_PLAN_CALENDAR_VIEW`** adds the `MealPlanCalendarView` enum and one more field to
+`core/settings/settings.py`, a field on `AppInfo` in `schema/admin/about.py`, one keyword argument
+in each of `routes/app/app_about.py` and `routes/admin/admin_about.py`, a test in each of the two
+test files, and the generated `admin.ts`.
+
 The prose in this section walks through the scoped-feedback edits specifically. Features shipped
 after `v3.24.0-woe.5` — the recipe source list, the "find me a new one" die, cart requests — have
 their files in the block above but are not all described here; the block is what a rebase needs.
 
-Seven entries in that list are **generated by `task dev:generate` and must never be
+Eight entries in that list are **generated by `task dev:generate` and must never be
 hand-edited**:
 
 - `mealie/schema/recipe/__init__.py`
 - `mealie/schema/user/__init__.py`
 - `tests/utils/api_routes/__init__.py`
+- `frontend/app/lib/api/types/admin.ts`
 - `frontend/app/lib/api/types/household.ts`
 - `frontend/app/lib/api/types/meal-plan.ts`
 - `frontend/app/lib/api/types/recipe.ts`
@@ -325,7 +377,7 @@ hand-edited**:
 If a rebase conflicts in one of those, do not merge the hunks. Take upstream's version, re-run
 `task dev:generate`, and commit the result.
 
-Four of those seven carry no fork content at all: `mealie/schema/recipe/__init__.py` and the
+Four of those eight carry no fork content at all: `mealie/schema/recipe/__init__.py` and the
 `household.ts` / `meal-plan.ts` / `recipe.ts` type modules gained `CategoryMerge`, `TagMerge` and
 `recipeCount` — upstream models that already existed in upstream's Python sources at `14e66291`
 while upstream's own committed generated files were stale. Running the generator materialised the
@@ -435,7 +487,7 @@ The fork's cost is paid at every upstream bump. Keep it mechanical and it stays 
    release tag. The contradiction is deliberate and still unresolved. If D6 is meant to win, the
    fix is a rebase onto the tag plus re-pointing `down_revision` back to that tag's head — not an
    edit to this paragraph.
-2. Resolve conflicts only in the files listed under **Conflict surface**. For the seven
+2. Resolve conflicts only in the files listed under **Conflict surface**. For the eight
    generated files, take upstream wholesale and let step 5 regenerate them.
 3. Re-point our migration's `down_revision` to the new upstream head. Immediately after the
    rebase, `PRODUCTION=false uv run alembic --config mealie/alembic/alembic.ini heads` will

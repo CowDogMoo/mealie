@@ -36,6 +36,7 @@ class AdminAboutController(BaseAdminController):
             enable_oidc=settings.OIDC_AUTH_ENABLED,
             oidc_redirect=settings.OIDC_AUTO_REDIRECT,
             oidc_provider_name=settings.OIDC_PROVIDER_NAME,
+            meal_plan_calendar_view=settings.MEAL_PLAN_CALENDAR_VIEW,
         )
 
     @router.get("/statistics", response_model=AppStatistics)

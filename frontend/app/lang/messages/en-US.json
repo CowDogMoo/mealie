@@ -1298,7 +1298,11 @@
     "sync-failed": "The calendar could not be synced",
     "last-synced": "Last synced {when}",
     "never-synced": "Not synced yet",
-    "last-error": "The last sync failed: {error}"
+    "last-error": "The last sync failed: {error}",
+    "view-embed-title": "Your household's meal plan in Google Calendar",
+    "view-embed-hint": "This is your household's Google calendar. To change the meal plan, use the Edit tab; the calendar follows.",
+    "view-not-linked": "This server shows the meal plan from Google Calendar, but your household has no calendar linked and kept up to date yet.",
+    "view-link-calendar": "Link a Google calendar"
   },
   "feedback": {
     "title": "Not for me",

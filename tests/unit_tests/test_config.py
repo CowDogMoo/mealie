@@ -53,6 +53,31 @@ def test_allowed_iframe_hosts_extends_defaults(monkeypatch):
     assert len(hosts) == len(set(hosts))
 
 
+def test_meal_plan_calendar_view_defaults_to_mealie(monkeypatch):
+    monkeypatch.delenv("MEAL_PLAN_CALENDAR_VIEW", raising=False)
+    get_app_settings.cache_clear()
+
+    assert get_app_settings().MEAL_PLAN_CALENDAR_VIEW == "mealie"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("mealie", "mealie"),
+        ("google", "google"),
+        (" Google ", "google"),
+        # A typo falls back to Mealie's own calendar instead of stopping the server.
+        ("gogle", "mealie"),
+        ("", "mealie"),
+    ],
+)
+def test_meal_plan_calendar_view_from_env(monkeypatch, value: str, expected: str):
+    monkeypatch.setenv("MEAL_PLAN_CALENDAR_VIEW", value)
+    get_app_settings.cache_clear()
+
+    assert get_app_settings().MEAL_PLAN_CALENDAR_VIEW == expected
+
+
 def test_default_connection_args(monkeypatch):
     monkeypatch.setenv("DB_ENGINE", "sqlite")
     get_app_settings.cache_clear()
