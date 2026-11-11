@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from . import (
+    controller_calendar_sync,
     controller_cart_requests,
     controller_cookbooks,
     controller_group_notifications,
@@ -19,6 +20,7 @@ from . import (
 
 router = APIRouter()
 
+router.include_router(controller_calendar_sync.router)
 router.include_router(controller_cart_requests.router)
 router.include_router(controller_cookbooks.router)
 router.include_router(controller_group_notifications.router)

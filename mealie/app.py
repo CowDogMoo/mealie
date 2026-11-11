@@ -25,6 +25,7 @@ from mealie.routes import router, spa, utility_routes
 from mealie.routes.handlers import register_debug_handler
 from mealie.routes.media import media_router
 from mealie.services.scheduler import SchedulerRegistry, SchedulerService, tasks
+from mealie.services.scheduler.tasks.sync_google_calendars import sync_google_calendars
 
 settings = get_app_settings()
 
@@ -137,6 +138,7 @@ async def start_scheduler():
 
     SchedulerRegistry.register_hourly(
         tasks.locked_user_reset,
+        sync_google_calendars,
     )
 
     SchedulerRegistry.print_jobs()

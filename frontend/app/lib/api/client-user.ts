@@ -14,6 +14,7 @@ import { GroupRecipeActionsAPI } from "./user/group-recipe-actions";
 import { WebhooksAPI } from "./user/group-webhooks";
 import { HouseholdRecipeRequestsAPI } from "./user/household-recipe-requests";
 import { HouseholdPantryAPI } from "./user/household-pantry";
+import { HouseholdCalendarSyncAPI } from "./user/household-calendar-sync";
 import { HouseholdRecipeSourcesAPI } from "./user/household-recipe-sources";
 import { RegisterAPI } from "./user/user-registration";
 import { MealPlanAPI } from "./user/group-mealplan";
@@ -47,6 +48,7 @@ export class UserApiClient {
   public recipeRequests: HouseholdRecipeRequestsAPI;
   public recipeSources: HouseholdRecipeSourcesAPI;
   public pantry: HouseholdPantryAPI;
+  public calendarSync: HouseholdCalendarSyncAPI;
   public register: RegisterAPI;
   public mealplans: MealPlanAPI;
   public mealplanRules: MealPlanRulesApi;
@@ -81,6 +83,7 @@ export class UserApiClient {
     this.recipeRequests = new HouseholdRecipeRequestsAPI(requests);
     this.recipeSources = new HouseholdRecipeSourcesAPI(requests);
     this.pantry = new HouseholdPantryAPI(requests);
+    this.calendarSync = new HouseholdCalendarSyncAPI(requests);
     this.register = new RegisterAPI(requests);
     this.mealplans = new MealPlanAPI(requests);
     this.mealplanRules = new MealPlanRulesApi(requests);
