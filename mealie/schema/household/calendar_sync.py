@@ -1,8 +1,10 @@
 """The household's meal plan, mirrored to one Google calendar.
 
-The mirror runs one way. Mealie's plan is the truth -- the planner, Home Assistant and the voting
-UI all read it -- and the calendar is a copy of it for people who would rather look at Google
-Calendar than open Mealie. Nothing is ever read back from the calendar into the plan.
+Mealie's plan is the truth -- the planner, Home Assistant and the voting UI all read it -- and the
+calendar is a copy of it for people who would rather look at Google Calendar than open Mealie.
+One thing only comes back from the calendar into the plan: the day. An event of the mirror's that
+somebody moves to another day in Google Calendar moves its plan entry to that day. Its time, title
+and description are the plan's to say, and deleting it there deletes nothing here.
 
 It is a push through the Calendar API rather than an ICS feed for two reasons that are both about
 this household: the instance is reachable only on the LAN, so Google could not fetch a feed, and a
@@ -80,8 +82,11 @@ class CalendarSyncStatus(MealieModel):
 
 
 class CalendarSyncResult(MealieModel):
-    """What one sync changed on the calendar. All zeroes means it already matched the plan."""
+    """What one sync changed. All zeroes means the calendar and the plan already matched."""
 
     created: int = 0
     updated: int = 0
     deleted: int = 0
+    moved: int = 0
+    """Plan entries moved to another day in Mealie because their event was moved in Google
+    Calendar. The other three count changes made to the calendar."""

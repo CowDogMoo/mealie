@@ -21,6 +21,11 @@ HOUSEHOLD_PROPERTY = "mealieHousehold"
 ENTRY_PROPERTY = "mealieEntry"
 """Private extended property holding the id of the plan entry the event mirrors."""
 
+DATE_PROPERTY = "mealieDate"
+"""Private extended property holding the day Mealie last put the event on. Google leaves it alone
+when somebody drags the event, so an event whose own day is no longer this one was moved in
+Google Calendar, and by nobody else."""
+
 TRANSPARENT = "transparent"
 """Google's word for "does not block time": dinner is on the calendar, nobody is busy during it."""
 
@@ -89,7 +94,13 @@ def event_body(
         "start": start,
         "end": end,
         "transparency": TRANSPARENT,
-        "extendedProperties": {"private": {HOUSEHOLD_PROPERTY: household_id, ENTRY_PROPERTY: str(entry.id)}},
+        "extendedProperties": {
+            "private": {
+                HOUSEHOLD_PROPERTY: household_id,
+                ENTRY_PROPERTY: str(entry.id),
+                DATE_PROPERTY: entry.date.isoformat(),
+            }
+        },
     }
     if link:
         body["source"] = {"title": entry.recipe.name if entry.recipe and entry.recipe.name else "Mealie", "url": link}
@@ -111,6 +122,19 @@ def belongs_to(event: dict[str, Any], household_id: str) -> bool:
 def entry_id_of(event: dict[str, Any]) -> str | None:
     value = private_properties(event).get(ENTRY_PROPERTY)
     return str(value) if value else None
+
+
+def written_date_of(event: dict[str, Any]) -> str | None:
+    """The day Mealie last put this event on, or None for an event written before that was kept."""
+
+    value = private_properties(event).get(DATE_PROPERTY)
+    return str(value) if value else None
+
+
+def changed_at(event: dict[str, Any]) -> datetime | None:
+    """When the event was last changed on Google's side, by anyone."""
+
+    return _instant(event.get("updated"))
 
 
 def _instant(value: Any) -> datetime | None:
@@ -163,10 +187,12 @@ def _edge_differs(existing: dict[str, Any], desired: dict[str, Any]) -> bool:
 
 
 def event_differs(existing: dict[str, Any], desired: dict[str, Any]) -> bool:
-    """Whether an event no longer says what its plan entry says: its name, its text or its time."""
+    """Whether an event no longer says what its plan entry says: its name, its text, its time, or
+    the day Mealie remembers putting it on."""
 
     return (
-        _text(existing.get("summary")) != _text(desired.get("summary"))
+        written_date_of(existing) != written_date_of(desired)
+        or _text(existing.get("summary")) != _text(desired.get("summary"))
         or _text(existing.get("description")) != _text(desired.get("description"))
         or _edge_differs(existing.get("start") or {}, desired["start"])
         or _edge_differs(existing.get("end") or {}, desired["end"])

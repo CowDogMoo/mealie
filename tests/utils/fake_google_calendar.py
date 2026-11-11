@@ -127,6 +127,20 @@ class FakeGoogleCalendar:
 
         return copy.deepcopy(self._store(calendar_id, body))
 
+    def edit_event(
+        self, calendar_id: str, event_id: str, changes: dict[str, Any], at: datetime | None = None
+    ) -> dict[str, Any]:
+        """Change an event the way a person in Google Calendar would: dragging it, renaming it.
+
+        The fields named are replaced whole, everything else (the private properties included) is
+        left as it was, and Google stamps the event with when it happened: `at`, or now.
+        """
+
+        event = self.calendars[calendar_id][event_id]
+        event |= copy.deepcopy(changes)
+        event["updated"] = (at or datetime.now(UTC)).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        return copy.deepcopy(event)
+
     def fail_calendar_calls(self, failure: int | Exception | None) -> None:
         """Make every Calendar API call answer this status, or raise this error. None heals it."""
 

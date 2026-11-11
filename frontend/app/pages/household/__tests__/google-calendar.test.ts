@@ -157,7 +157,8 @@ describe("a server that can reach Google", () => {
   test("explains itself, shows the account to share with, and walks through the three steps", async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.text()).toContain("It goes one way only");
+    expect(wrapper.text()).toContain("Change the plan in Mealie and the calendar follows");
+    expect(wrapper.text()).toContain("Move a meal to another day in Google Calendar and Mealie follows");
     expect(part(wrapper, "calendar-sync-not-configured").exists()).toBe(false);
 
     expect(part(wrapper, "calendar-sync-account").text()).toBe(ACCOUNT);
@@ -294,6 +295,18 @@ describe("sync now", () => {
     expect(alertError).not.toHaveBeenCalled();
     expect(get).toHaveBeenCalledTimes(2);
     expect(part(wrapper, "calendar-sync-last-synced").text()).toContain("Last synced");
+  });
+
+  test("says so when meals moved in Mealie because their events were moved in Google Calendar", async () => {
+    sync.mockResolvedValue({ data: { created: 0, updated: 2, deleted: 0, moved: 2 }, error: null });
+    const wrapper = await mountPage();
+
+    await pressSyncNow(wrapper);
+
+    expect(alertSuccess).toHaveBeenCalledTimes(1);
+    expect(alertSuccess).toHaveBeenCalledWith(
+      "Calendar synced: 2 moved in Mealie to match Google Calendar, 0 added, 2 changed, 0 removed",
+    );
   });
 
   test("a calendar that already matched is reported as that, not as zeroes", async () => {

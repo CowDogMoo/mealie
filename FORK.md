@@ -179,9 +179,9 @@ ingredient somebody ticks by hand in the add-to-list dialog is added even when i
 drop that port when a rebase brings the fix in.
 
 **Google Calendar.** A household can mirror its meal plan onto one Google calendar, so dinner is
-where people already look and nobody has to open Mealie's planner to see it. It runs one way:
-Mealie's plan stays the truth -- the planner, Home Assistant and the votes all read it -- and
-nothing is ever read back from Google. It is a push through the Calendar API and not an ICS feed
+where people already look and nobody has to open Mealie's planner to see it. Mealie's plan stays
+the truth -- the planner, Home Assistant and the votes all read it -- and exactly one thing is read
+back from Google: the day of an event somebody moved (below). It is a push through the Calendar API and not an ICS feed
 for two reasons that are about this household: the instance is reachable only on the LAN, so
 Google could not fetch a feed, and a dinner is swapped minutes after a thumbs-down, which a feed
 polled twice a day would show wrong. The credential is server-wide, in a new setting,
@@ -214,9 +214,10 @@ the `TZ` to fix. A dinner an older version wrote as an all-day event is patched 
 hours by the next sync, in place. Three things set a sync off: the meal
 plan's own `mealplan_entry_*` events on the event bus (a new listener, run as a background task
 after the response, so a Google failure can neither fail nor slow a plan change);
-`POST /api/households/calendar-sync/sync`, the page's "Sync now"; and an hourly scheduler task,
-which heals whatever those missed, including changes nothing announces, like a recipe being
-renamed. Syncs are serialized per household and coalesced, in this process only, because the
+`POST /api/households/calendar-sync/sync`, the page's "Sync now"; and a scheduler task every five
+minutes (registered with upstream's "minutely" tasks, which is what that interval is called),
+which is what notices a dinner moved in Google Calendar and also heals whatever the other two
+missed, including changes nothing announces, like a recipe being renamed. Syncs are serialized per household and coalesced, in this process only, because the
 planner replaces a week in a burst of fourteen writes; the duplicate removal is what puts things
 right if two processes ever overlap. The latest failure is kept on the row (`last_error`), shown
 on the page, and cleared by the next sync that works. The upstream edits are the setting in
@@ -236,6 +237,46 @@ Turning it on is three steps, and only the first needs whoever runs the server:
    a copy button -- and choose "Make changes to events".
 3. On `/household/google-calendar`, paste the calendar's id (Settings > Integrate calendar), switch
    the mirror on, save, and press "Sync now" to fill the calendar straight away.
+
+**Moving a dinner in Google Calendar moves it in Mealie.** Google Calendar is the easy place to
+drag Tuesday's dinner to Thursday, so that is the one edit made there that counts. Every sync
+starts by reading the mirror's events for ones on another day than Mealie put them, and moves each
+such plan entry to the event's day before it pushes the plan (`CalendarSyncService._pull_moves`).
+The sweep runs every five minutes, so a move made in Google reaches Mealie within about that; "Sync
+now" does it at once. The rules:
+
+| Done in Google Calendar                | What Mealie does                                                        |
+| -------------------------------------- | ----------------------------------------------------------------------- |
+| Event moved to another day             | Moves the meal to that day; the event is set to that day's 6 to 8 PM     |
+| Time changed, same day                 | Nothing; the event is put back to 6 to 8 PM                              |
+| Title or description changed           | Nothing; the event's text is put back to the plan's                      |
+| Event deleted                          | Nothing is deleted; the event is written again                           |
+| Moved there *and* in Mealie since the last sync | The newer of the two moves wins; the other is overwritten      |
+
+Only the day comes back, and it is read in the server's `TZ`, the same zone the event was written
+in. A move is recognized by a third private property on every event, `mealieDate`, the day Mealie
+last put the event on: dragging an event changes its day and leaves the property, so the two
+disagree only when the move was made in Google. If the entry's own date still equals `mealieDate`,
+only Google moved it. If the entry's date changed too (Mealie's push failed, or has not run yet),
+both sides moved it, and Google's `updated` time on the event is compared with the entry's own
+`update_at`; a tie, or a time that cannot be read, goes to Mealie. Things to know:
+
+- An event written before this existed has no `mealieDate`, and a different day on it is not read
+  as a move. The first sync after the upgrade stamps every event in the window (one patch each),
+  and moves are followed from then on.
+- A meal moved this way is written straight to the plan and does not go out on the event bus, so
+  notifiers and webhooks subscribed to meal plan updates do not hear about it.
+- The calendar is read from three days ago onward. An event dragged further into the past than
+  that is no longer seen, so its meal stays where it was and gets a new event there.
+- A copy of an event made in Google Calendar ("Duplicate") carries the same properties. It is not
+  a second meal: the sync keeps the older event and deletes the copy.
+- `CalendarSyncResult` gained `moved`, the number of meals a sync moved in Mealie; the page's
+  "Sync now" message says so when it is not zero.
+
+The planner page has an **"Open Family calendar"** button beside its settings link
+(`<GroupMealPlanCalendarLink>`) whenever the household's mirror is on. It opens
+`https://calendar.google.com/calendar/r?cid=<calendar id>` in a new tab: the Google Calendar app
+on a phone that has it, the site otherwise. Nothing of Google's is shown inside Mealie.
 
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
@@ -280,6 +321,7 @@ frontend/app/components/Domain/Recipe/RecipeCardMobile.vue
 frontend/app/components/Domain/Recipe/RecipeCardSection.vue
 frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPage.vue
 frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCard.vue
+frontend/app/pages/household/mealplan/planner.vue
 frontend/app/pages/household/mealplan/planner/view.vue
 frontend/app/pages/shopping-lists/[id].vue
 frontend/app/pages/user/profile/index.vue
@@ -306,10 +348,11 @@ The three shopping-list entries come from **cart requests** (below): a `set_extr
 `repository_shopping_list.py`, two methods and a route on the shopping list API client, and the
 `<ShoppingListCartButton>` line on the list page. The rest of that feature is new files.
 
-Four entries come from **Google Calendar**, and each is a line or two: the
+Five entries come from **Google Calendar**, and each is a line or two: the
+`<GroupMealPlanCalendarLink />` line and its import in the planner page (`mealplan/planner.vue`), the
 `GOOGLE_CALENDAR_CREDENTIALS` field at the end of `AppSettings` in `core/settings/settings.py`, the
 `CalendarSyncEventListener` import and list entry in `event_bus_service.py`, the
-`sync_google_calendars` import and `register_hourly` entry in `app.py`, and `last_synced_at` in
+`sync_google_calendars` import and `register_minutely` entry in `app.py`, and `last_synced_at` in
 `AlchemyExporter.look_for_datetime`. That last one is not optional: a restore rebuilds datetimes by
 column name, so a datetime column missing from that set comes back from a backup as a string
 (upstream's `test_every_datetime_column_survives_a_backup` fails until it is added). The task is

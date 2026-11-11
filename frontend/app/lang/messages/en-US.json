@@ -1276,7 +1276,7 @@
   },
   "calendar-sync": {
     "title": "Google Calendar",
-    "description": "Mealie copies your household's meal plan onto a Google calendar, so tonight's dinner is where you already look. It goes one way only: change the plan in Mealie and the calendar follows.",
+    "description": "Mealie copies your household's meal plan onto a Google calendar, so tonight's dinner is where you already look. Change the plan in Mealie and the calendar follows. Move a meal to another day in Google Calendar and Mealie follows within a few minutes; anything else you change there is put back.",
     "not-configured": "This server is not connected to Google yet. Whoever runs it needs to set {setting} before a calendar can be linked.",
     "setup-heading": "Set it up",
     "account-label": "Mealie's Google account",
@@ -1298,7 +1298,9 @@
     "sync-failed": "The calendar could not be synced",
     "last-synced": "Last synced {when}",
     "never-synced": "Not synced yet",
-    "last-error": "The last sync failed: {error}"
+    "last-error": "The last sync failed: {error}",
+    "open-calendar": "Open Family calendar",
+    "synced-moved": "Calendar synced: {moved} moved in Mealie to match Google Calendar, {created} added, {updated} changed, {deleted} removed"
   },
   "feedback": {
     "title": "Not for me",
