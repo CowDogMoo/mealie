@@ -185,15 +185,20 @@ nothing is ever read back from Google. It is a push through the Calendar API and
 for two reasons that are about this household: the instance is reachable only on the LAN, so
 Google could not fetch a feed, and a dinner is swapped minutes after a thumbs-down, which a feed
 polled twice a day would show wrong. The credential is server-wide, in a new setting,
-`GOOGLE_CALENDAR_CREDENTIALS`: the JSON of a service-account key or of an authorized-user
-credential, traded for access tokens with `httpx` and `PyJWT`
-(`mealie/services/google_calendar/credentials.py`); no Google client library was added. Which
-calendar, and whether the mirror is on, is one row per household in `household_calendar_sync`
-(revision `a7e2d4f9c6b3`), set on `/household/google-calendar` through `GET` and
+`GOOGLE_CALENDAR_CREDENTIALS`: the JSON of a service-account key, and of nothing else, traded for
+access tokens with `httpx` and `PyJWT` (`mealie/services/google_calendar/credentials.py`); no
+Google client library was added. Server-wide is meant literally: nothing ties a calendar to the
+household that shared it, so anyone who can manage any household on the instance can point its
+mirror at any calendar the service account can write. That suits an instance with a single
+household, which this one is, and is not a boundary between households. Which calendar, and
+whether the mirror is on, is one row per household in `household_calendar_sync` (revision
+`a7e2d4f9c6b3`), set on `/household/google-calendar` through `GET` and
 `PUT /api/households/calendar-sync`. Turning it on is refused unless the calendar can be opened and
 written to there and then, and the refusal names the service account's address, which is what the
-household shares its calendar with ("Make changes to events"). **A sync is a reconcile, not a push
-of one change** (`mealie/services/household_services/calendar_sync.py`): read the plan from
+household shares its calendar with ("Make changes to events"). Events already written stay in the
+old calendar when the mirror is switched to another calendar or turned off; nothing goes back to
+remove them. **A sync is a reconcile, not a push of one change**
+(`mealie/services/household_services/calendar_sync.py`): read the plan from
 yesterday onward, list the calendar's events that carry this household's private extended property
 (`mealieHousehold`, with `mealieEntry` naming the plan entry), then add what is missing, patch what
 differs, and delete what has no entry or is a second copy of one. An event without the household's

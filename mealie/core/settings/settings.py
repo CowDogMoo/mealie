@@ -508,7 +508,7 @@ class AppSettings(AppLoggingSettings):
     # ===============================================
     # Google Calendar sync (fork; see FORK.md)
     GOOGLE_CALENDAR_CREDENTIALS: MaskedNoneString = None
-    """The JSON of a Google service-account key, or of an authorized-user credential, as one string.
+    """The JSON of a Google service-account key, as one string.
     When set, a household can mirror its meal plan to a Google calendar. Unset disables it."""
 
 

@@ -1,21 +1,16 @@
 """The server's Google credential, and the access tokens minted from it.
 
-`GOOGLE_CALENDAR_CREDENTIALS` holds one JSON document, in either of the two shapes Google hands
-out:
+`GOOGLE_CALENDAR_CREDENTIALS` holds one JSON document: a **service-account key**
+(`"type": "service_account"`). The server signs a short-lived JWT with the key and trades it for
+an access token. The service account is its own Google identity with an email address, and a
+household shares its calendar with that address.
 
-- a **service-account key** (`"type": "service_account"`): the server signs a short-lived JWT with
-  the key and trades it for an access token. The service account is its own Google identity with
-  an email address, and a household shares its calendar with that address.
-- an **authorized-user credential** (`"type": "authorized_user"`): a refresh token for a person's
-  own Google account, traded for an access token. No sharing is involved; the server reaches
-  whatever calendars that person can.
-
-Both trades are one form POST each, so they are done here with `httpx` and `PyJWT` rather than by
-adding Google's client libraries to the image.
+The trade is one form POST, so it is done here with `httpx` and `PyJWT` rather than by adding
+Google's client libraries to the image.
 
 **Nothing in this module may put the credential, or any part of it, into a log line, an exception
-message or a return value** other than the access token handed to the caller. The secret fields
-are kept out of `repr`, and the one error that would otherwise quote a key parser is replaced with
+message or a return value** other than the access token handed to the caller. The private key
+is kept out of `repr`, and the one error that would otherwise quote a key parser is replaced with
 a fixed sentence.
 """
 
@@ -26,7 +21,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Final, Literal
+from typing import Final
 
 import httpx
 import jwt
@@ -43,7 +38,6 @@ covered by it too, so the probe a household's "enable" runs needs no scope beyon
 SCOPES: tuple[str, ...] = (CALENDAR_EVENTS_SCOPE,)
 
 JWT_BEARER_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer"
-REFRESH_TOKEN_GRANT = "refresh_token"
 
 ASSERTION_LIFETIME_SECONDS = 3600
 """Google caps a signed assertion at one hour after it was issued."""
@@ -56,7 +50,6 @@ FALLBACK_TOKEN_LIFETIME_SECONDS = 300
 """Used only if a token response does not say how long the token lasts."""
 
 SERVICE_ACCOUNT: Final = "service_account"
-AUTHORIZED_USER: Final = "authorized_user"
 
 logger = get_logger()
 
@@ -71,43 +64,21 @@ class GoogleAuthError(Exception):
 
 @dataclass(frozen=True)
 class GoogleCredentials:
-    kind: Literal["service_account", "authorized_user"]
-    token_uri: str = GOOGLE_TOKEN_URI
+    """A service-account key, reduced to the fields the sign-in uses."""
 
-    # service account
-    client_email: str | None = None
+    client_email: str
+    """The service account's own address: who the JWT says is asking, and the address a calendar
+    is shared with so this credential can write to it."""
+
+    private_key: str = field(repr=False)
     private_key_id: str | None = None
-    private_key: str | None = field(default=None, repr=False)
-
-    # authorized user
-    client_id: str | None = None
-    client_secret: str | None = field(default=None, repr=False)
-    refresh_token: str | None = field(default=None, repr=False)
-
-    @property
-    def account_email(self) -> str | None:
-        """The address a calendar is shared with so this credential can write to it.
-
-        Only a service account has one. An authorized user is a person, reaches their own
-        calendars without a share, and their address is not part of the credential.
-        """
-
-        return self.client_email if self.kind == SERVICE_ACCOUNT else None
+    token_uri: str = GOOGLE_TOKEN_URI
 
     @property
     def fingerprint(self) -> str:
         """Tells one credential from another in the token cache without holding it as a key."""
 
-        parts = (
-            self.kind,
-            self.token_uri,
-            self.client_email,
-            self.private_key_id,
-            self.private_key,
-            self.client_id,
-            self.client_secret,
-            self.refresh_token,
-        )
+        parts = (self.token_uri, self.client_email, self.private_key_id, self.private_key)
         return hashlib.sha256("\x1f".join(part or "" for part in parts).encode()).hexdigest()
 
 
@@ -130,38 +101,23 @@ def parse_credentials(raw: str) -> GoogleCredentials:
         if missing:
             raise GoogleCredentialsError(f"missing {', '.join(missing)}")
 
-    kind = info.get("type")
+    if info.get("type") != SERVICE_ACCOUNT:
+        raise GoogleCredentialsError(f'"type" must be "{SERVICE_ACCOUNT}"')
 
-    if kind == SERVICE_ACCOUNT:
-        required("client_email", "private_key", "token_uri")
-        private_key: str = info["private_key"]
-        if "\n" not in private_key.strip():
-            # a key that went through one escaping too many arrives with the two characters `\n`
-            # where its line breaks were; a PEM reader needs the line breaks
-            private_key = private_key.replace("\\n", "\n")
+    required("client_email", "private_key", "token_uri")
+    private_key: str = info["private_key"]
+    if "\n" not in private_key.strip():
+        # a key that went through one escaping too many arrives with the two characters `\n`
+        # where its line breaks were; a PEM reader needs the line breaks
+        private_key = private_key.replace("\\n", "\n")
 
-        key_id = info.get("private_key_id")
-        return GoogleCredentials(
-            kind=SERVICE_ACCOUNT,
-            token_uri=info["token_uri"].strip(),
-            client_email=info["client_email"].strip(),
-            private_key_id=key_id if isinstance(key_id, str) and key_id else None,
-            private_key=private_key,
-        )
-
-    if kind == AUTHORIZED_USER:
-        required("client_id", "client_secret", "refresh_token")
-        # the file `gcloud` writes for a person carries no token endpoint; Google has only the one
-        token_uri = info.get("token_uri")
-        return GoogleCredentials(
-            kind=AUTHORIZED_USER,
-            token_uri=token_uri.strip() if isinstance(token_uri, str) and token_uri.strip() else GOOGLE_TOKEN_URI,
-            client_id=info["client_id"].strip(),
-            client_secret=info["client_secret"].strip(),
-            refresh_token=info["refresh_token"].strip(),
-        )
-
-    raise GoogleCredentialsError(f'"type" must be "{SERVICE_ACCOUNT}" or "{AUTHORIZED_USER}"')
+    key_id = info.get("private_key_id")
+    return GoogleCredentials(
+        token_uri=info["token_uri"].strip(),
+        client_email=info["client_email"].strip(),
+        private_key_id=key_id if isinstance(key_id, str) and key_id else None,
+        private_key=private_key,
+    )
 
 
 @lru_cache(maxsize=2)
@@ -213,7 +169,7 @@ def _assertion(credentials: GoogleCredentials, now: float) -> str:
     headers = {"kid": credentials.private_key_id} if credentials.private_key_id else None
 
     try:
-        return jwt.encode(claims, credentials.private_key or "", algorithm="RS256", headers=headers)
+        return jwt.encode(claims, credentials.private_key, algorithm="RS256", headers=headers)
     except Exception:
         # `from None`, and no quoting: what a key parser says about a key it cannot read is said
         # about the key's own bytes, and this message ends up in a database row and on a page
@@ -240,15 +196,7 @@ def _refusal(response: httpx.Response) -> str:
 def mint_access_token(credentials: GoogleCredentials, http: httpx.Client, now: float) -> AccessToken:
     """Trade the credential for an access token. One POST, to the credential's own token endpoint."""
 
-    if credentials.kind == SERVICE_ACCOUNT:
-        form = {"grant_type": JWT_BEARER_GRANT, "assertion": _assertion(credentials, now)}
-    else:
-        form = {
-            "grant_type": REFRESH_TOKEN_GRANT,
-            "client_id": credentials.client_id or "",
-            "client_secret": credentials.client_secret or "",
-            "refresh_token": credentials.refresh_token or "",
-        }
+    form = {"grant_type": JWT_BEARER_GRANT, "assertion": _assertion(credentials, now)}
 
     try:
         response = http.post(credentials.token_uri, data=form)

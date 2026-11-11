@@ -244,7 +244,7 @@ class CalendarSyncService(BaseService):
 
         return CalendarSyncStatus(
             configured=credentials is not None,
-            account_email=credentials.account_email if credentials else None,
+            account_email=credentials.client_email if credentials else None,
             calendar_id=row.calendar_id if row else None,
             enabled=bool(row and row.enabled),
             last_synced_at=row.last_synced_at if row else None,
@@ -298,7 +298,7 @@ class CalendarSyncService(BaseService):
         length: a service account's address alone can run to eighty characters.
         """
 
-        who = credentials.account_email or "the Google account this server signs in as"
+        who = credentials.client_email
         share = f'In Google Calendar, share the calendar with {who} and choose "Make changes to events"'
 
         try:

@@ -187,14 +187,17 @@ describe("a server that can reach Google", () => {
     expect(part(wrapper, "calendar-sync-last-synced").text()).toBe("Not synced yet");
   });
 
-  test("a server signed in as a person has no address to share with, and says what to check instead", async () => {
-    serve(mirror({ accountEmail: null }));
+  test("says the Google account is the whole server's, and that old events stay where they were written", async () => {
     const wrapper = await mountPage();
 
-    expect(part(wrapper, "calendar-sync-account").exists()).toBe(false);
-    const steps = part(wrapper, "calendar-sync-steps").findAll("li").map(step => step.text());
-    expect(steps).toHaveLength(3);
-    expect(steps[1]).toContain("the Google account this server signs in with");
+    const serverWide = part(wrapper, "calendar-sync-server-wide").text();
+    expect(serverWide).toContain("one Google account for every household");
+    expect(serverWide).toContain("any calendar that account can change");
+    expect(serverWide).toContain("a single household");
+
+    const leftBehind = part(wrapper, "calendar-sync-left-behind").text();
+    expect(leftBehind).toContain("stay in the old calendar");
+    expect(leftBehind).toContain("link a different calendar or turn this off");
   });
 });
 

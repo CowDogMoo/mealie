@@ -51,14 +51,15 @@
             data-testid="calendar-sync-steps"
           >
             <li>{{ $t('calendar-sync.step-create') }}</li>
-            <li v-if="status.accountEmail">
-              {{ $t('calendar-sync.step-share', { email: status.accountEmail }) }}
-            </li>
-            <li v-else>
-              {{ $t('calendar-sync.step-share-own-account') }}
-            </li>
+            <li>{{ $t('calendar-sync.step-share', { email: status.accountEmail }) }}</li>
             <li>{{ $t('calendar-sync.step-id') }}</li>
           </ol>
+          <p
+            class="text-body-2 text-medium-emphasis mt-3 mb-0"
+            data-testid="calendar-sync-server-wide"
+          >
+            {{ $t('calendar-sync.server-wide-note') }}
+          </p>
         </v-card-text>
       </v-card>
 
@@ -151,6 +152,12 @@
       </p>
       <p class="text-body-2 text-medium-emphasis">
         {{ $t('calendar-sync.sync-hint') }}
+      </p>
+      <p
+        class="text-body-2 text-medium-emphasis"
+        data-testid="calendar-sync-left-behind"
+      >
+        {{ $t('calendar-sync.left-behind-note') }}
       </p>
     </template>
   </v-container>

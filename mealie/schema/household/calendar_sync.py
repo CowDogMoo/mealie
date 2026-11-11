@@ -69,9 +69,8 @@ class CalendarSyncStatus(MealieModel):
     """Whether the server has a usable Google credential. Without one nothing can be enabled."""
 
     account_email: str | None = None
-    """The address the household shares its calendar with: a service account's `client_email`.
-    Empty when the server signs in as a person instead, who needs no share to reach their own
-    calendars. The credential itself is never returned, only this address."""
+    """The address the household shares its calendar with: the service account's `client_email`.
+    The credential itself is never returned, only this address."""
 
     calendar_id: str | None = None
     enabled: bool = False

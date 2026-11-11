@@ -73,15 +73,6 @@ def service_account_credentials() -> GoogleCredentials:
     return parse_credentials(json.dumps(service_account_info()))
 
 
-def authorized_user_info() -> dict[str, str]:
-    return {
-        "type": "authorized_user",
-        "client_id": "test-client.apps.googleusercontent.com",
-        "client_secret": "test-client-secret",
-        "refresh_token": "1//test-refresh-token",
-    }
-
-
 def _error(status_code: int, message: str) -> httpx.Response:
     return httpx.Response(status_code, json={"error": {"code": status_code, "message": message}})
 

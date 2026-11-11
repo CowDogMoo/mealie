@@ -1,11 +1,12 @@
 """Unit tests for the server's Google credential and the access tokens minted from it.
 
-Both credential shapes are exercised against a fake token endpoint, with a throwaway RSA key made
+A service-account key is exercised against a fake token endpoint, with a throwaway RSA key made
 for the test run. What is checked is what Google checks: the claims and signature of the JWT a
-service account sends, and the form an authorized user sends. Nothing here reaches Google.
+service account sends. Nothing here reaches Google.
 """
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import httpx
@@ -28,7 +29,6 @@ from mealie.services.google_calendar.credentials import (
 from tests.utils.fake_google_calendar import (
     SERVICE_ACCOUNT_EMAIL,
     FakeGoogleCalendar,
-    authorized_user_info,
     private_key_pem,
     public_key_pem,
     service_account_credentials,
@@ -52,22 +52,25 @@ def key_body() -> str:
 def test_service_account_key_is_read():
     credentials = parse_credentials(json.dumps(service_account_info()))
 
-    assert credentials.kind == "service_account"
     assert credentials.client_email == SERVICE_ACCOUNT_EMAIL
-    assert credentials.account_email == SERVICE_ACCOUNT_EMAIL
     assert credentials.token_uri == GOOGLE_TOKEN_URI
     assert credentials.private_key == private_key_pem()
     assert credentials.private_key_id == "test-key-1"
 
 
-def test_authorized_user_is_read_and_has_no_address_to_share_with():
-    credentials = parse_credentials(json.dumps(authorized_user_info()))
+def test_a_persons_own_google_credential_is_refused():
+    info = {
+        "type": "authorized_user",
+        "client_id": "test-client.apps.googleusercontent.com",
+        "client_secret": "test-client-secret",
+        "refresh_token": "1//test-refresh-token",
+    }
 
-    assert credentials.kind == "authorized_user"
-    assert credentials.refresh_token == "1//test-refresh-token"
-    # the file gcloud writes carries no token endpoint; Google has only the one
-    assert credentials.token_uri == GOOGLE_TOKEN_URI
-    assert credentials.account_email is None
+    with pytest.raises(GoogleCredentialsError, match='"type" must be "service_account"') as refusal:
+        parse_credentials(json.dumps(info))
+
+    assert "test-client-secret" not in str(refusal.value)
+    assert "test-refresh-token" not in str(refusal.value)
 
 
 @pytest.mark.parametrize(
@@ -90,14 +93,6 @@ def test_an_unusable_key_is_refused_by_field_name_never_by_value(change: dict, s
     assert key_body() not in str(refusal.value)
 
 
-def test_authorized_user_without_a_refresh_token_is_refused():
-    info = authorized_user_info()
-    del info["refresh_token"]
-
-    with pytest.raises(GoogleCredentialsError, match="missing refresh_token"):
-        parse_credentials(json.dumps(info))
-
-
 @pytest.mark.parametrize("raw", ["not json at all", '"a string"', "[1, 2]"])
 def test_a_setting_that_is_not_a_json_object_is_refused(raw: str):
     with pytest.raises(GoogleCredentialsError) as refusal:
@@ -116,11 +111,7 @@ def test_a_key_whose_line_breaks_were_escaped_once_too_often_still_signs():
 
 
 def test_secrets_stay_out_of_repr():
-    for credentials in (service_account_credentials(), parse_credentials(json.dumps(authorized_user_info()))):
-        shown = repr(credentials)
-        assert key_body() not in shown
-        assert "test-client-secret" not in shown
-        assert "test-refresh-token" not in shown
+    assert key_body() not in repr(service_account_credentials())
 
 
 # ---------------------------------------------------------------------------
@@ -213,24 +204,6 @@ def test_service_account_signs_a_jwt_and_trades_it_for_a_token():
     assert "sub" not in claims
 
 
-def test_authorized_user_trades_its_refresh_token():
-    google = FakeGoogleCalendar()
-    credentials = parse_credentials(json.dumps(authorized_user_info()))
-
-    with google.client() as http:
-        token = mint_access_token(credentials, http, NOW)
-
-    assert token.value == "ya29.fake-1"
-    assert google.token_requests == [
-        {
-            "grant_type": "refresh_token",
-            "client_id": "test-client.apps.googleusercontent.com",
-            "client_secret": "test-client-secret",
-            "refresh_token": "1//test-refresh-token",
-        }
-    ]
-
-
 def test_a_refused_credential_says_what_google_said_and_nothing_secret():
     google = FakeGoogleCalendar()
     google.fail_sign_in(400, "invalid_grant", "Invalid JWT Signature.")
@@ -314,12 +287,12 @@ def test_each_credential_keeps_its_own_token():
     google = FakeGoogleCalendar()
     cache = AccessTokenCache(clock=lambda: NOW)
     account = service_account_credentials()
-    person = parse_credentials(json.dumps(authorized_user_info()))
+    another = replace(account, client_email="another-mirror@dinner-test.iam.gserviceaccount.com")
 
     with google.client() as http:
-        assert cache.get(account, http) != cache.get(person, http)
+        assert cache.get(account, http) != cache.get(another, http)
         assert cache.get(account, http) == "ya29.fake-1"
-        assert cache.get(person, http) == "ya29.fake-2"
+        assert cache.get(another, http) == "ya29.fake-2"
 
     assert len(google.token_requests) == 2
 
