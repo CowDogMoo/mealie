@@ -84,6 +84,7 @@ from ._utils import NOT_SET, NotSet
 from .repository_generic import GroupRepositoryGeneric, HouseholdRepositoryGeneric
 from .repository_group import RepositoryGroup
 from .repository_meals import RepositoryMeals
+from .repository_pantry import RepositoryPantry
 from .repository_recipes import RepositoryRecipes
 from .repository_shopping_list import RepositoryShoppingList
 from .repository_users import RepositoryUserFeedback, RepositoryUserRatings, RepositoryUsers
@@ -465,6 +466,10 @@ class AllRepositories:
             group_id=self.group_id,
             household_id=self.household_id,
         )
+
+    @cached_property
+    def pantry(self) -> RepositoryPantry:
+        return RepositoryPantry(self.session, group_id=self.group_id, household_id=self.household_id)
 
     @cached_property
     def recipe_requests(self) -> HouseholdRepositoryGeneric[RecipeRequestOut, HouseholdRecipeRequestModel]:

@@ -222,6 +222,21 @@
             {{ $t('profile.recipe-sources-description') }}
           </UserProfileLinkCard>
         </v-col>
+        <v-col
+          cols="12"
+          sm="12"
+          md="6"
+        >
+          <UserProfileLinkCard
+            :link="{ text: $t('profile.manage-pantry'), to: `/household/pantry` }"
+            image="/svgs/shopping-cart.svg"
+          >
+            <template #title>
+              {{ $t('pantry.title') }}
+            </template>
+            {{ $t('profile.pantry-description') }}
+          </UserProfileLinkCard>
+        </v-col>
         <AdvancedOnly>
           <v-col
             cols="12"

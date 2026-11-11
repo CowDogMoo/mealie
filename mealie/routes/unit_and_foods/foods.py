@@ -17,6 +17,7 @@ from mealie.schema.recipe.recipe_ingredient import (
 )
 from mealie.schema.response.pagination import PaginationQuery
 from mealie.schema.response.responses import SuccessResponse
+from mealie.services.household_services.pantry import PantryService
 
 router = APIRouter(prefix="/foods", tags=["Recipes: Foods"], route_class=MealieCrudRoute)
 
@@ -50,7 +51,9 @@ class IngredientFoodsController(BaseUserController):
     def create_one(self, data: CreateIngredientFood):
         self.checks.can_organize()
         save_data = mapper.cast(data, SaveIngredientFood, group_id=self.group_id)
-        return self.mixins.create_one(save_data)
+        food = self.mixins.create_one(save_data)
+        # a new spelling of a pantry staple ("fine sea salt") is a staple too
+        return PantryService(self.repos).inherit(food)
 
     @router.put("/merge", response_model=SuccessResponse)
     def merge_one(self, data: MergeFood):
