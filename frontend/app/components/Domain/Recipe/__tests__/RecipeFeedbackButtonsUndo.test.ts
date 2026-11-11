@@ -3,9 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, ref } from "vue";
 import { createVuetify } from "vuetify";
 import { VBtn, VIcon, VTooltip } from "vuetify/components";
-import { hiddenRecipeIds, latestDismissByRecipe } from "~/composables/use-users/feedback-log";
 import enUS from "~/lang/messages/en-US.json";
-import type { UserFeedbackOut } from "~/lib/api/types/user";
 
 interface FeedbackEvent {
   id: string;
@@ -76,11 +74,6 @@ const THUMBS_UP = `[aria-label="${feedback["thumbs-up"]}"]`;
 const THUMBS_DOWN = `[aria-label="${feedback["thumbs-down"]}"]`;
 const FIND_NEW = "[data-test=\"find-new\"]";
 const DISMISS = "[data-test=\"dismiss\"]";
-
-// what the hidden-recipes filter and the feedback page read the same log through
-function log(): UserFeedbackOut[] {
-  return selfFeedback.value as UserFeedbackOut[];
-}
 
 function event(vote: string, id = `${vote}-event`, createdAt = "2026-09-01T00:00:00"): FeedbackEvent {
   return { id, recipeId: "recipe-uuid", vote, createdAt };
@@ -207,66 +200,47 @@ describe("taking a vote back from the thumbs", () => {
 });
 
 describe("the x on a card that stays on screen", () => {
-  // the server's half of a press: the event lands in the log the card reads back
-  function recordPresses() {
-    setFeedback.mockImplementation(async (_slug: string, payload: { vote: string }) => {
-      const id = `${payload.vote}-${selfFeedback.value.length + 1}`;
-      selfFeedback.value = [...selfFeedback.value, event(payload.vote, id, new Date().toISOString())];
-      return { response: { status: 201 } };
-    });
-  }
-
   beforeEach(() => {
     isOwnGroup.value = true;
     selfFeedback.value = [];
     setFeedback.mockReset();
+    setFeedback.mockResolvedValue({ response: { status: 201 } });
     deleteFeedback.mockReset();
     alertSuccess.mockReset();
     alertError.mockReset();
   });
 
-  test("pressing it twice logs one removal, so one undo brings the recipe back", async () => {
-    recordPresses();
+  test("every press is sent: whether the recipe is already removed is the server's to say", async () => {
     const wrapper = mountButtons();
 
     await wrapper.find(DISMISS).trigger("click");
     await flushPromises();
+
+    // this tab's copy of the log now shows the removal, and the card is still on screen
+    selfFeedback.value = [event("dismiss", "dismiss-event", new Date().toISOString())];
+
+    await wrapper.find(DISMISS).trigger("click");
+    await flushPromises();
+
+    expect(setFeedback).toHaveBeenCalledTimes(2);
+    expect(setFeedback).toHaveBeenLastCalledWith("chicken-thighs-with-fennel", { vote: "dismiss" });
+    expect(alertSuccess).toHaveBeenCalledTimes(2);
+    expect(alertSuccess).toHaveBeenLastCalledWith(feedback["dismissed"]);
+    expect(alertError).not.toHaveBeenCalled();
+  });
+
+  test("a log that still shows a removal undone elsewhere does not stand in for the request", async () => {
+    selfFeedback.value = [event("dismiss", "undone-on-another-device", "2026-09-01T00:00:00")];
+    setFeedback.mockResolvedValue({ response: null, error: new Error("Network Error"), data: null });
+    const wrapper = mountButtons();
+
     await wrapper.find(DISMISS).trigger("click");
     await flushPromises();
 
     expect(setFeedback).toHaveBeenCalledTimes(1);
     expect(setFeedback).toHaveBeenCalledWith("chicken-thighs-with-fennel", { vote: "dismiss" });
-    expect(log().map(logged => logged.vote)).toEqual(["dismiss"]);
-    expect(hiddenRecipeIds(log()).has("recipe-uuid")).toBe(true);
-
-    // the second press is answered too: the recipe is removed, which is what it asked for
-    expect(alertSuccess).toHaveBeenCalledTimes(2);
-    expect(alertSuccess).toHaveBeenLastCalledWith(feedback["dismissed"]);
-    expect(alertError).not.toHaveBeenCalled();
-
-    // My Recipe Feedback undoes the one event its "Removed" row shows
-    const removal = latestDismissByRecipe(log()).get("recipe-uuid");
-    selfFeedback.value = selfFeedback.value.filter(logged => logged.id !== removal?.id);
-
-    expect(latestDismissByRecipe(log()).size).toBe(0);
-    expect(hiddenRecipeIds(log()).has("recipe-uuid")).toBe(false);
-  });
-
-  test("it is a fresh removal again once a later vote has brought the recipe back", async () => {
-    selfFeedback.value = [
-      event("dismiss", "old-dismiss", "2026-09-01T00:00:00"),
-      event("up", "later-up", "2026-09-02T00:00:00"),
-    ];
-    recordPresses();
-    const wrapper = mountButtons();
-
-    expect(hiddenRecipeIds(log()).has("recipe-uuid")).toBe(false);
-
-    await wrapper.find(DISMISS).trigger("click");
-    await flushPromises();
-
-    expect(setFeedback).toHaveBeenCalledTimes(1);
-    expect(hiddenRecipeIds(log()).has("recipe-uuid")).toBe(true);
+    expect(alertSuccess).not.toHaveBeenCalled();
+    expect(alertError).toHaveBeenCalledWith(feedback["save-failed"]);
   });
 
   test.each([

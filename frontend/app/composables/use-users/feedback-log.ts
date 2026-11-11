@@ -72,25 +72,17 @@ export function latestDismissByRecipe(events: UserFeedbackOut[]): Map<string, Us
 }
 
 /**
- * The newest event of any kind per recipe: the log read as one timeline rather than as opinions
- * and requests apart. It is what decides whether a recipe is hidden, and whether an "x" on it
- * would say anything the log does not already say.
- */
-export function latestEventByRecipe(events: UserFeedbackOut[]): Map<string, UserFeedbackOut> {
-  return newestByRecipe(events, () => true);
-}
-
-/**
  * The recipes a person has taken out of their own grids.
  *
  * Three presses do that: "Not for me", "Find me a new one" and the "x". Each way the recipe stays in the
  * household's collection (a housemate may love it) but drops out of this person's view until
  * they undo the event or ask to see hidden recipes. A later up or neutral vote lifts it again,
- * and so does a later thumbs down being undone -- what hides is the newest event of any kind.
+ * and so does a later thumbs down being undone -- what hides is the newest event of any kind,
+ * so the log is read as one timeline here rather than as opinions and requests apart.
  */
 export function hiddenRecipeIds(events: UserFeedbackOut[]): Set<string> {
   const hidden = new Set<string>();
-  for (const [recipeId, latest] of latestEventByRecipe(events)) {
+  for (const [recipeId, latest] of newestByRecipe(events, () => true)) {
     if (latest.vote === "down" || latest.vote === REFILL_VOTE || latest.vote === DISMISS_VOTE) {
       hidden.add(recipeId);
     }

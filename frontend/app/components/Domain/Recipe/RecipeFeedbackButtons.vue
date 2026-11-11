@@ -109,7 +109,6 @@ import { useUserSelfFeedback } from "~/composables/use-users";
 import {
   DISMISS_VOTE,
   REFILL_VOTE,
-  latestEventByRecipe,
   latestFeedbackByRecipe,
   latestRefillByRecipe,
 } from "~/composables/use-users/feedback-log";
@@ -181,24 +180,15 @@ async function requestRefill() {
   await send({ vote: REFILL_VOTE }, i18n.t("feedback.find-new-requested"));
 }
 
-const removed = computed(
-  () => latestEventByRecipe(userFeedback.value).get(props.recipeId)?.vote === DISMISS_VOTE,
-);
-
 // The "x": take this recipe off my list without saying anything about it. No dialog, no star and
 // no thumb moves, which is the point -- a thumbs down needs a reason, and "not this one" often has
 // none. The recipe leaves the presser's own grids at once and the household's planner stops
 // suggesting it; My Recipe Feedback lists it under "Removed", where it can be undone. Unlike the
-// die, a second press says nothing new: a card that stays on screen after its x (a planned night,
-// or the grid with hidden recipes shown) logs one removal however often it is pressed, so the one
-// undo on that page is all it takes to bring the recipe back.
+// die, a second press says nothing new, and the server is the one that knows it: every press is
+// sent, and a recipe that is already removed is answered with the removal the log already holds
+// (see `create_feedback`), so the one undo on that page is all it takes to bring the recipe back.
 async function dismiss() {
   if (saving.value) {
-    return;
-  }
-
-  if (removed.value) {
-    alert.success(i18n.t("feedback.dismissed"));
     return;
   }
 

@@ -149,9 +149,10 @@ without saying anything about it. It posts a `dismiss` event (`DISMISS_VOTE` in
 as a vote. It asks for no reason, writes no star and moves no thumb; the recipe leaves the
 presser's own grids the way a thumbs-down does, My Recipe Feedback lists it under "Removed" where
 it can be undone, and the planner skill reads it from the household feed and stops suggesting the
-recipe. A card that stays on screen after its x (a planned night, or the grid with hidden recipes
-shown) posts nothing more when the x is pressed again, so that one undo is all it takes to bring
-the recipe back. **The planner must know the vote before the fork ships it**: `history.mjs` throws on a
+recipe. A card can stay on screen after its x (a planned night, or the grid with hidden recipes
+shown), so the x can be pressed again: the route stores nothing for a `dismiss` whose caller's
+newest event on that recipe is already a `dismiss` and answers with that one, so one undo is all
+it takes to bring the recipe back. **The planner must know the vote before the fork ships it**: `history.mjs` throws on a
 vote it has never heard of, so a `dismiss` event reaching an old runner fails every sync tick.
 Deploy the runner first.
 

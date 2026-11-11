@@ -55,8 +55,10 @@ DISMISS_VOTE = "dismiss"
 """Not an opinion either: the "x" on a recipe card. "Take this one off my list" with nothing said
 about why -- no reason is asked for, no star is written and nobody's thumb moves. The recipe drops
 out of the presser's own browse grids, as it does for a thumbs down, and the household's planner,
-which reads the feedback log, stops suggesting it. Unlike ``refill`` it asks for nothing in return.
-It is an event in the log so that it can be undone from the same page as any vote."""
+which reads the feedback log, stops suggesting it. Unlike ``refill`` it asks for nothing in return,
+and a repeat is not a fresh one: a ``dismiss`` straight on top of the same person's ``dismiss`` is
+not stored again (see ``create_feedback``). It is an event in the log so that it can be undone from
+the same page as any vote."""
 
 FEEDBACK_VOTES: tuple[str, ...] = (*OPINION_VOTES, REFILL_VOTE, DISMISS_VOTE)
 """Every vote the API accepts. ``down`` is the only one that requires a reason."""

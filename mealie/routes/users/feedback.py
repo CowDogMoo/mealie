@@ -20,7 +20,13 @@ from mealie.routes.users._helpers import assert_user_change_allowed
 from mealie.schema.recipe.recipe import Recipe
 from mealie.schema.response.responses import ErrorResponse
 from mealie.schema.user.user import UserRatingCreate
-from mealie.schema.user.user_feedback import UserFeedbackCreate, UserFeedbackIn, UserFeedbackOut, UserFeedbacks
+from mealie.schema.user.user_feedback import (
+    DISMISS_VOTE,
+    UserFeedbackCreate,
+    UserFeedbackIn,
+    UserFeedbackOut,
+    UserFeedbacks,
+)
 from mealie.services.recipe_sources.service import RecipeSourceService
 
 router = UserAPIRouter()
@@ -98,11 +104,23 @@ class UserFeedbackController(BaseUserController):
 
     @router.post("/{id}/feedback/{slug}", response_model=UserFeedbackOut, status_code=status.HTTP_201_CREATED)
     def create_feedback(self, id: UUID4, slug: str, data: UserFeedbackIn) -> UserFeedbackOut:
-        """Record one feedback event on a recipe, plus the star rating that vote implies."""
+        """Record one feedback event on a recipe, plus the star rating that vote implies.
+
+        A ``dismiss`` on a recipe whose newest event from this person is already a ``dismiss``
+        writes nothing and answers with the removal the log already holds. A second "x" says
+        nothing the first did not, and a second row would outlive the one undo that is meant to
+        bring the recipe back. The rule lives here because this log is the only one that is never
+        stale: a browser holds a copy, and a second tab or a failed refresh leaves that copy wrong.
+        """
 
         assert_user_change_allowed(id, self.user, self.user)
 
         recipe = self.get_recipe_or_404(slug)
+
+        if data.vote == DISMISS_VOTE:
+            mine = self.repos.user_feedback.get_by_users([id], recipe_id=recipe.id)
+            if mine and mine[-1].vote == DISMISS_VOTE:
+                return mine[-1]
 
         # UserFeedbackCreate recomputes `advisory` from the licensing map in its model validator,
         # and the request body has no `advisory`, `user_id` or `recipe_id` field to smuggle one
