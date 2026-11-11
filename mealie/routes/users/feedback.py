@@ -187,6 +187,11 @@ class UserFeedbackController(BaseUserController):
         back than what the person last chose. An event that wrote no star in the first place
         (``neutral``, ``refill``, ``dismiss``) has none to take back, so undoing it leaves the
         star exactly as it stands.
+
+        Undoing a ``dismiss`` takes every ``dismiss`` this person has on the recipe with it. Two
+        can end up in the log when a vote was cast between them, and undoing that vote leaves them
+        back to back; the page shows one "Removed" row, and its one undo has to bring the recipe
+        back whatever was said in between.
         """
 
         assert_user_change_allowed(id, self.user, self.user)
@@ -199,6 +204,10 @@ class UserFeedbackController(BaseUserController):
             )
 
         deleted = self.repos.user_feedback.delete(event_id)
+        if deleted.vote == DISMISS_VOTE:
+            rest = self.repos.user_feedback.get_by_users([id], recipe_id=deleted.recipe_id, vote=DISMISS_VOTE)
+            self.repos.user_feedback.delete_many([dismissal.id for dismissal in rest])
+
         self.unsync_star_rating(id, deleted)
 
         return deleted

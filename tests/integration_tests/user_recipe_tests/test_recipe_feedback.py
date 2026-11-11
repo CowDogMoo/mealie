@@ -1066,6 +1066,69 @@ def test_a_thumb_between_two_dismisses_lets_the_second_one_be_recorded(
     assert own_feedback(api_client, caster)[-1]["id"] == second["id"]
 
 
+def test_one_undo_brings_the_recipe_back_whatever_was_voted_between_two_dismisses(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
+):
+    """x, thumbs up, x, un-thumb, one undo: no removal is left behind.
+
+    The thumb between the two presses is what let the second x be stored, and taking the thumb
+    back leaves the two removals back to back. My Recipe Feedback shows one "Removed" row for
+    them, so its one undo has to clear both, or the row would come straight back and the recipe
+    would stay hidden.
+    """
+
+    caster, housemate = user_tuple
+    recipe = recipe_factory(caster)
+
+    post_feedback(api_client, caster, recipe, vote="dismiss")
+    separate_events()
+    thumb = post_feedback(api_client, caster, recipe, vote="up")
+    separate_events()
+    newest = post_feedback(api_client, caster, recipe, vote="dismiss")
+    undo_feedback(api_client, caster, thumb)
+    assert len(own_dismissals(api_client, caster, recipe)) == 2
+
+    undo_feedback(api_client, caster, newest)
+
+    assert own_dismissals(api_client, caster, recipe) == []
+    assert household_feedback(api_client, housemate, vote="dismiss", recipeId=str(recipe.id)) == []
+    # nothing this person said about the recipe is left, so nothing is left to hide it
+    assert [event for event in own_feedback(api_client, caster) if event["recipeId"] == str(recipe.id)] == []
+
+
+@pytest.mark.parametrize("undone", [0, -1], ids=["the-older-dismiss", "the-newer-dismiss"])
+def test_undoing_a_dismiss_takes_only_that_persons_dismisses_on_that_recipe(
+    api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory, undone: int
+):
+    """Whichever of the removals is undone, both go -- and nothing else in anybody's log does."""
+
+    caster, housemate = user_tuple
+    recipe = recipe_factory(caster)
+    other = recipe_factory(caster)
+
+    post_feedback(api_client, caster, recipe, vote="dismiss")
+    separate_events()
+    thumb = post_feedback(api_client, caster, recipe, vote="up")
+    separate_events()
+    post_feedback(api_client, caster, recipe, vote="dismiss")
+    elsewhere = post_feedback(api_client, caster, other, vote="dismiss")
+    theirs = post_feedback(api_client, housemate, recipe, vote="dismiss")
+
+    mine = own_dismissals(api_client, caster, recipe)
+    assert len(mine) == 2
+
+    undo_feedback(api_client, caster, mine[undone])
+
+    assert own_dismissals(api_client, caster, recipe) == []
+    # the thumb between them still stands, and is now the newest thing said: the recipe is back
+    remaining = [event for event in own_feedback(api_client, caster) if event["recipeId"] == str(recipe.id)]
+    assert [event["id"] for event in remaining] == [thumb["id"]]
+    assert self_rating(api_client, caster, recipe)["rating"] == 5
+
+    assert [event["id"] for event in own_dismissals(api_client, caster, other)] == [elsewhere["id"]]
+    assert [event["id"] for event in own_dismissals(api_client, housemate, recipe)] == [theirs["id"]]
+
+
 def test_a_repeat_dismiss_is_per_person_and_per_recipe(
     api_client: TestClient, user_tuple: tuple[TestUser, TestUser], recipe_factory: RecipeFactory
 ):
