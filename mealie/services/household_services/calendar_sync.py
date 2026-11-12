@@ -232,22 +232,18 @@ def oldest_first(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def reconcile(
     calendar: GoogleCalendarClient,
     calendar_id: str,
-    household_id: str,
+    listed: list[dict[str, Any]],
     desired: dict[str, dict[str, Any]],
     first_day: date,
     zone: tzinfo,
-    listed: list[dict[str, Any]] | None = None,
 ) -> CalendarSyncResult:
     """Make the calendar's events for this household equal `desired`, keyed by plan entry id.
 
+    `listed` is the household's events as `list_mirror` read them; no other event is touched.
     Adds what is missing, patches what no longer matches, and deletes events whose entry is gone
     along with any second event for an entry that already has one. `zone` is the zone the desired
-    events were written in; a timed event's day is read there. `listed` is the household's events
-    when the caller has already read them (`list_mirror`); otherwise they are read here.
+    events were written in; a timed event's day is read there.
     """
-
-    if listed is None:
-        listed = list_mirror(calendar, calendar_id, household_id, first_day)
 
     by_entry: dict[str | None, list[dict[str, Any]]] = {}
     for event in listed:
@@ -538,7 +534,7 @@ class CalendarSyncService(BaseService):
                 # the calendar's say comes first, so the plan that is pushed already has it
                 followed = self._pull_moves(listed, zone)
                 desired = self._desired_events(first_day, zone, followed)
-                result = reconcile(calendar, calendar_id, self.household_id, desired, first_day, zone, listed)
+                result = reconcile(calendar, calendar_id, listed, desired, first_day, zone)
         except (GoogleAuthError, GoogleCalendarError, CalendarSyncTimeZoneError) as e:
             reason = _one_line(str(e))
             self.logger.warning("calendar sync failed for household %s: %s", self.household_id, reason)

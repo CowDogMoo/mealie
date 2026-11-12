@@ -26,6 +26,7 @@ from mealie.services.google_calendar.events import (
 from mealie.services.household_services.calendar_sync import (
     CalendarSyncTimeZoneError,
     HouseholdSyncGate,
+    list_mirror,
     reconcile,
     server_zone,
     window_start,
@@ -246,7 +247,8 @@ def test_a_timed_events_day_is_read_in_the_zone_it_was_written_in():
 def reconciled(google: FakeGoogleCalendar, plan: list[ReadPlanEntry], first_day: date) -> dict[str, int]:
     with google.client() as http:
         client = GoogleCalendarClient(service_account_credentials(), http, AccessTokenCache())
-        result = reconcile(client, CALENDAR, HOUSEHOLD, {str(e.id): body(e) for e in plan}, first_day, DENVER)
+        listed = list_mirror(client, CALENDAR, HOUSEHOLD, first_day)
+        result = reconcile(client, CALENDAR, listed, {str(e.id): body(e) for e in plan}, first_day, DENVER)
     return result.model_dump()
 
 
@@ -368,7 +370,7 @@ def test_an_entry_moved_from_before_the_window_into_it_takes_its_event_along():
 class UnfilteredCalendar:
     """A calendar whose list ignores the property filter, as if Google had handed back everything.
 
-    It never should. `reconcile` checks each event's property itself all the same, because that
+    It never should. `list_mirror` checks each event's property itself all the same, because that
     check is the only thing between a sync and somebody's own events, and this is what proves it.
     """
 
@@ -393,7 +395,7 @@ class UnfilteredCalendar:
         self.deleted.append(event_id)
 
 
-def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark():
+def test_a_sync_refuses_to_touch_an_event_without_this_households_mark():
     planned = entry()
     wanted = body(planned)
     day = wanted["start"]
@@ -408,8 +410,11 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
     ours_but_stale = {**body(entry(entry_id=999)), "id": "stale"}
 
     calendar = UnfilteredCalendar([somebodys_own, neighbours, unmarked_entry, ours_but_stale])
-    result = reconcile(calendar, CALENDAR, HOUSEHOLD, {"41": wanted}, date(2026, 11, 11), DENVER)  # type: ignore[arg-type]
+    first_day = date(2026, 11, 11)
+    listed = list_mirror(calendar, CALENDAR, HOUSEHOLD, first_day)  # type: ignore[arg-type]
+    result = reconcile(calendar, CALENDAR, listed, {"41": wanted}, first_day, DENVER)  # type: ignore[arg-type]
 
+    assert [event["id"] for event in listed] == ["stale"]
     # only the event that is ours is removed; the three that are not are neither patched nor
     # deleted, and none of them counts as entry 41's event, so that one is added
     assert calendar.deleted == ["stale"]
