@@ -268,6 +268,10 @@ the event there. Things to know:
   notifiers and webhooks subscribed to meal plan updates do not hear about it.
 - The calendar is read from three days ago onward. An event dragged further into the past than
   that is no longer seen, so its meal stays where it was and gets a new event there.
+- A dinner dragged to a day inside those three days moves there like any other, even though the
+  day is before the window the mirror otherwise leaves alone ("when we cooked it"). That one sync
+  sets the event to the day's 6 to 8 PM and to the day as its `mealieDate`; after it the event is
+  a record like any other eaten dinner. Dragging it forward again moves the meal forward again.
 - A copy of an event made in Google Calendar ("Duplicate") carries the same properties. It is not
   a second meal: the sync keeps the older event and deletes the copy.
 

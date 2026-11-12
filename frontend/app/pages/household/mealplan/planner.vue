@@ -80,7 +80,7 @@
         class="ml-auto mr-4"
         @click="addAllToList"
       />
-      <GroupMealPlanCalendarLink />
+      <GroupMealPlanCalendarLink :class="{ 'ml-auto': route.name !== TABS.view }" />
       <ButtonLink
         :icon="$globals.icons.calendar"
         :to="`/household/mealplan/settings`"

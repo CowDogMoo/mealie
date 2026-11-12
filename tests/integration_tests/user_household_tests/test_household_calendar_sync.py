@@ -948,6 +948,84 @@ def test_a_meal_moved_in_mealie_too_keeps_the_day_mealie_gave_it(
     assert event["extendedProperties"]["private"][DATE_PROPERTY] == day(1)
 
 
+# the day before the window opens: read from the calendar still, mirrored to it no longer
+EATEN = -4
+
+
+def test_a_dinner_dragged_to_before_the_window_moves_there_and_back_again(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # dragged back to the day it was cooked on
+    drag(mirrored, event, EATEN)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(EATEN)
+    [eaten] = mirrored.events(CALENDAR)
+    assert eaten["id"] == event["id"]
+    assert (eaten["start"], eaten["end"]) == dinner_time(EATEN)
+    assert eaten["extendedProperties"]["private"][DATE_PROPERTY] == day(EATEN), "the event says where Mealie has it"
+
+    # from then on it is a record: nothing more to do
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
+
+    # dragged forward again, to the very day it started on
+    drag(mirrored, eaten, 0)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+    [back] = mirrored.events(CALENDAR)
+    assert back["id"] == event["id"], "the event is followed, not deleted"
+    assert (back["start"], back["end"]) == dinner_time()
+    assert back["extendedProperties"]["private"][DATE_PROPERTY] == day()
+
+
+def test_a_meal_put_back_in_mealie_after_a_drag_to_before_the_window_stays_put(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+    drag(mirrored, event, EATEN)
+    sync_now(api_client, unique_user)
+
+    # changed in Mealie, which syncs as it happens
+    reschedule(api_client, unique_user, entry, day())
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+    [restored] = mirrored.events(CALENDAR)
+    assert restored["id"] == event["id"]
+    assert (restored["start"], restored["end"]) == dinner_time()
+    assert restored["extendedProperties"]["private"][DATE_PROPERTY] == day()
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+
+
+def test_a_move_to_before_the_window_that_google_was_not_told_about_is_told_by_the_next_sync(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # where a sync leaves things when it moves the meal and Google then fails: the meal and its
+    # event on the same day, and the event still saying the old one
+    mirrored.fail_calendar_calls(503)
+    reschedule(api_client, unique_user, entry, day(EATEN))
+    mirrored.fail_calendar_calls(None)
+    drag(mirrored, event, EATEN)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(EATEN)
+    [eaten] = mirrored.events(CALENDAR)
+    assert eaten["id"] == event["id"]
+    assert eaten["extendedProperties"]["private"][DATE_PROPERTY] == day(EATEN)
+
+
 def test_an_event_from_before_moves_were_followed_is_not_read_as_a_move(
     api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
 ):
