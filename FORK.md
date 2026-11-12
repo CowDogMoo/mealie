@@ -220,10 +220,9 @@ which is what notices a dinner moved in Google Calendar and also heals whatever 
 missed, including changes nothing announces, like a recipe being renamed. Syncs are serialized per household and coalesced, in this process only, because the
 planner replaces a week in a burst of fourteen writes; the duplicate removal is what puts things
 right if two processes ever overlap. The latest failure is kept on the row (`last_error`), shown
-on the page, and cleared by the next sync that works. The upstream edits are the setting in
-`core/settings/settings.py`, one line in `EventBusService._get_listeners`, the task's registration
-in `app.py`, the new datetime column's name in the backup exporter, and the usual model,
-repository, router and client registrations.
+on the page, and cleared by the next sync that works. The upstream edits are the ones listed for
+Google Calendar under "Conflict surface" below, plus the usual model, repository, router and
+client registrations.
 
 Turning it on is three steps, and only the first needs whoever runs the server:
 
@@ -266,9 +265,10 @@ the event there. Things to know:
   and moves are followed from then on.
 - A meal moved this way is written straight to the plan and does not go out on the event bus, so
   notifiers and webhooks subscribed to meal plan updates do not hear about it.
-- The calendar is read from three days ago onward. An event dragged further into the past than
-  that is no longer seen, so its meal stays where it was and gets a new event there.
-- A dinner dragged to a day inside those three days moves there like any other, even though the
+- The calendar is read back to midnight UTC three days ago, which west of UTC, where this
+  household is, still takes in the day before that. An event dragged further into the past is no
+  longer seen, so its meal stays where it was and gets a new event there.
+- A dinner dragged to a day inside that reach moves there like any other, even though the
   day is before the window the mirror otherwise leaves alone ("when we cooked it"). That one sync
   sets the event to the day's 6 to 8 PM and to the day as its `mealieDate`; after it the event is
   a record like any other eaten dinner. Dragging it forward again moves the meal forward again.
