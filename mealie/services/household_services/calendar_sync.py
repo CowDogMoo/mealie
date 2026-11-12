@@ -331,7 +331,7 @@ class CalendarSyncService(BaseService):
         """Save which calendar to mirror to and whether the mirror is on.
 
         Turning it on is refused unless the calendar can be opened and written to right now, so
-        a wrong id or a calendar nobody shared is found out on this page and not an hour later.
+        a wrong id or a calendar nobody shared is found out on this page and not by a later sync.
         Saving with the mirror off talks to nobody.
         """
 
