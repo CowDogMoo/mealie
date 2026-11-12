@@ -39,14 +39,6 @@ describe("moveEntryToDate", () => {
     expect(update).toHaveBeenCalledWith({ ...meal, date: "2026-08-21" });
   });
 
-  test("formats a Date as the plan's yyyy-MM-dd", async () => {
-    const update = vi.fn();
-
-    await moveEntryToDate(entry(1, "2026-08-19"), new Date(2026, 7, 22), update);
-
-    expect(update.mock.calls[0][0].date).toBe("2026-08-22");
-  });
-
   test("does not change the entry it was given", async () => {
     const meal = entry(1, "2026-08-19");
 

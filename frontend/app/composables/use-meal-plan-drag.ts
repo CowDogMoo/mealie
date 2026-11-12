@@ -1,8 +1,7 @@
-import { format } from "date-fns";
 import type { ReadPlanEntry, UpdatePlanEntry } from "~/lib/api/types/meal-plan";
 
 /**
- * Options shared by every meal plan list that lets entries be dragged between days.
+ * Options for the meal planner's day lists, which let entries be dragged between days.
  *
  * On a touch screen a drag only starts after a short press (a quarter second), so a finger that is
  * scrolling the page never picks a meal up by accident; with a mouse the drag starts at once.
@@ -15,23 +14,22 @@ export const mealDragOptions = {
   touchStartThreshold: 8,
   animation: 150,
   ghostClass: "meal-drag-ghost",
-  chosenClass: "meal-drag-chosen",
 } as const;
 
 type UpdateEntry = (entry: UpdatePlanEntry) => Promise<unknown> | unknown;
 
 /**
- * Give `entry` a new date and save it. Returns false, and saves nothing, when the entry already
- * sits on that day. The calendar sync listens for entry updates, so it pushes the move on its own.
+ * Give `entry` a new date (yyyy-MM-dd) and save it. Returns false, and saves nothing, when the
+ * entry already sits on that day. The calendar sync listens for entry updates, so it pushes the
+ * move on its own.
  */
-export async function moveEntryToDate(entry: ReadPlanEntry, date: Date | string, update: UpdateEntry): Promise<boolean> {
-  const newDate = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
-  if (entry.date === newDate) {
+export async function moveEntryToDate(entry: ReadPlanEntry, date: string, update: UpdateEntry): Promise<boolean> {
+  if (entry.date === date) {
     return false;
   }
 
   // Send a copy: the entry object is shared with the plan the page was given.
-  await update({ ...entry, date: newDate });
+  await update({ ...entry, date });
   return true;
 }
 

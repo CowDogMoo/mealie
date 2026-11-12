@@ -243,9 +243,9 @@ on a phone only by the little arrows button. Each day on `planner/view.vue` is n
 `vue-draggable-plus` list (the library the Edit tab already used, in the same `meals` group), a
 whole card is the handle, and dropping it on another day saves the entry with that day's date
 through the same `updateOne` the date field uses, so the calendar sync pushes the move as it would
-any date edit. The drop logic is shared: `composables/use-meal-plan-drag.ts` holds the options
+any date edit. The drop logic lives in `composables/use-meal-plan-drag.ts`, which holds the options
 (touch needs a 250 ms press before a card lifts, so swiping to scroll never picks one up) and
-`handleMealDrop`, and the Edit tab now calls it too instead of its own index bookkeeping. Each
+`handleMealDrop`; the Edit tab is left as upstream has it, with its own drop handler. Each
 day's list carries its date as `data-date` and each card its entry id as `data-entry-id`. The lists
 do not reorder within a day, because the view orders a day by meal type; an entry keeps its meal
 type when it moves. Verified by hand at 390x844 with touch emulation (iPhone Safari user agent,
@@ -299,7 +299,6 @@ frontend/app/components/Domain/Recipe/RecipeCardSection.vue
 frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPage.vue
 frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCard.vue
 frontend/app/pages/household/mealplan/planner/view.vue
-frontend/app/pages/household/mealplan/planner/edit.vue
 frontend/app/pages/shopping-lists/[id].vue
 frontend/app/pages/user/profile/index.vue
 frontend/app/lib/api/user/group-shopping-lists.ts
