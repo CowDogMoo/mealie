@@ -26,37 +26,57 @@
             </v-row>
           </v-container>
         </v-card>
-        <div v-for="section in day.sections" :key="section.type">
-          <div class="pt-3 pb-1 d-flex flex-column">
-            <p class="text-overline my-0">
-              {{ section.title }}
-            </p>
-          </div>
-
-          <RecipeCardMobile
-            v-for="mealplan in section.meals"
+        <VueDraggable
+          v-model="dayMeals[day.key]"
+          tag="div"
+          v-bind="mealDragOptions"
+          :sort="false"
+          class="meal-drop-zone"
+          :data-date="day.key"
+          @end="onDrop"
+        >
+          <div
+            v-for="(mealplan, mealIndex) in dayMeals[day.key]"
             :key="mealplan.id"
-            :recipe-id="mealplan.recipe ? mealplan.recipe.id! : ''"
-            class="mb-2"
-            :rating="mealplan.recipe ? mealplan.recipe.rating! : 0"
-            :slug="mealplan.recipe ? mealplan.recipe.slug! : ''"
-            :description="mealplan.recipe ? mealplan.recipe.description! : mealplan.text!"
-            :name="mealplan.recipe ? mealplan.recipe.name! : mealplan.title!"
-            :image="mealplan.recipe ? mealplan.recipe.image! : undefined"
-            :tags="mealplan.recipe ? mealplan.recipe.tags! : []"
-            show-feedback
-          />
-        </div>
+            class="meal-drag-item"
+            :data-entry-id="mealplan.id"
+          >
+            <div
+              v-if="startsSection(dayMeals[day.key], mealIndex)"
+              class="pt-3 pb-1 d-flex flex-column"
+            >
+              <p class="text-overline my-0">
+                {{ typeTitle(mealplan.entryType) }}
+              </p>
+            </div>
+
+            <RecipeCardMobile
+              :recipe-id="mealplan.recipe ? mealplan.recipe.id! : ''"
+              class="mb-2"
+              :rating="mealplan.recipe ? mealplan.recipe.rating! : 0"
+              :slug="mealplan.recipe ? mealplan.recipe.slug! : ''"
+              :description="mealplan.recipe ? mealplan.recipe.description! : mealplan.text!"
+              :name="mealplan.recipe ? mealplan.recipe.name! : mealplan.title!"
+              :image="mealplan.recipe ? mealplan.recipe.image! : undefined"
+              :tags="mealplan.recipe ? mealplan.recipe.tags! : []"
+              show-feedback
+            />
+          </div>
+        </VueDraggable>
       </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script setup lang="ts">
-import { isSameDay } from "date-fns";
+import { format, isSameDay } from "date-fns";
+import { VueDraggable } from "vue-draggable-plus";
 
 import type { PlanEntryType, ReadPlanEntry } from "~/lib/api/types/meal-plan";
+import type { useMealplans } from "~/composables/use-group-mealplan";
 import { usePlanTypeOptions } from "~/composables/use-group-mealplan";
+import { handleMealDrop, mealDragOptions } from "~/composables/use-meal-plan-drag";
+import type { MealDropEvent } from "~/composables/use-meal-plan-drag";
 import GroupMealPlanDayContextMenu from "~/components/Domain/Household/GroupMealPlanDayContextMenu.vue";
 import RecipeCardMobile from "~/components/Domain/Recipe/RecipeCardMobile.vue";
 import type { RecipeSummary } from "~/lib/api/types/recipe";
@@ -68,39 +88,75 @@ export type MealsByDate = {
 
 const props = defineProps<{
   mealplans: MealsByDate[];
+  actions: ReturnType<typeof useMealplans>["actions"];
 }>();
-
-type DaySection = {
-  type: PlanEntryType;
-  title: string;
-  meals: ReadPlanEntry[];
-};
 
 type Days = {
   date: Date;
-  sections: DaySection[];
+  key: string;
   recipes: RecipeSummary[];
 };
 
 const i18n = useI18n();
 const planTypeOptions = usePlanTypeOptions();
+const typeOrder = planTypeOptions.map(({ value }) => value);
 
 const plan = computed<Days[]>(() => {
   return props.mealplans.map((day) => {
     return {
       date: day.date,
-      sections: planTypeOptions
-        .map(({ value }) => ({
-          type: value,
-          title: i18n.t(`meal-plan.${value}`),
-          meals: day.meals.filter(meal => meal.entryType === value),
-        }))
-        // Drop empty sections
-        .filter(section => section.meals.length),
+      key: format(day.date, "yyyy-MM-dd"),
       recipes: day.meals.flatMap(meal => meal.recipe ?? []),
     };
   });
 });
+
+// Each day's meals, grouped under a heading per meal type, as a list the drag-and-drop can edit.
+// A drop moves the meal into another day's list straight away, in its meal-type place; the lists
+// are rebuilt from the plan once the saved move comes back, or at once when the move was not saved.
+const dayMeals = reactive<{ [date: string]: ReadPlanEntry[] }>({});
+
+function inTypeOrder(meals: ReadPlanEntry[]) {
+  return [...meals].sort(
+    (a, b) => typeOrder.indexOf(a.entryType ?? "dinner") - typeOrder.indexOf(b.entryType ?? "dinner"),
+  );
+}
+
+function showPlan(days: MealsByDate[]) {
+  const keys = new Set<string>();
+  for (const day of days) {
+    const key = format(day.date, "yyyy-MM-dd");
+    keys.add(key);
+    dayMeals[key] = inTypeOrder(day.meals);
+  }
+  for (const key of Object.keys(dayMeals)) {
+    if (!keys.has(key)) {
+      dayMeals[key] = [];
+    }
+  }
+}
+
+watch(() => props.mealplans, showPlan, { immediate: true, deep: true });
+
+function startsSection(meals: ReadPlanEntry[], index: number) {
+  return index === 0 || meals[index - 1]?.entryType !== meals[index]?.entryType;
+}
+
+function typeTitle(type: PlanEntryType | undefined) {
+  return i18n.t(`meal-plan.${type ?? "dinner"}`);
+}
+
+async function onDrop(evt: MealDropEvent) {
+  const key = evt.to.dataset.date;
+  if (key && dayMeals[key]) {
+    dayMeals[key] = inTypeOrder(dayMeals[key]);
+  }
+
+  const saved = await handleMealDrop(evt, props.mealplans, entry => props.actions.updateOne(entry));
+  if (!saved) {
+    showPlan(props.mealplans);
+  }
+}
 
 const isToday = (date: Date) => {
   return isSameDay(date, new Date());
@@ -116,6 +172,25 @@ const isToday = (date: Date) => {
 */
 .col-borders {
   min-width: 340px;
+}
+
+/*
+  Every day is a drop target, so an empty day still needs a body to drop on. Dragging has to
+  work from a finger on a home-screen web app too: a long press on a card would otherwise select
+  its text or open the iOS link preview, and neither should happen while a meal is being moved.
+*/
+.meal-drop-zone {
+  min-height: 96px;
+}
+
+.meal-drag-item {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.meal-drag-ghost {
+  opacity: 0.4;
 }
 
 /*

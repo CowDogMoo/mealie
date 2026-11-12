@@ -81,7 +81,7 @@ export const useMealplans = function (range: Ref<DateRange>) {
     },
     async updateOne(updateData: UpdatePlanEntry) {
       if (!updateData.id) {
-        return;
+        return false;
       }
 
       loading.value = true;
@@ -90,6 +90,7 @@ export const useMealplans = function (range: Ref<DateRange>) {
         this.refreshAll();
       }
       loading.value = false;
+      return Boolean(data);
     },
 
     async deleteOne(id: string | number) {
