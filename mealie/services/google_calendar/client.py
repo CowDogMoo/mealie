@@ -22,7 +22,7 @@ from .events import HOUSEHOLD_PROPERTY
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 
 HTTP_TIMEOUT_SECONDS = 15.0
-"""Per request. A sync set off by a plan change or the hourly sweep runs on a background thread,
+"""Per request. A sync set off by a plan change or the sweep runs on a background thread,
 after the response that caused it, so there this bounds how long that thread waits on Google.
 "Sync now" and the check made when a mirror is switched on are answered while a person waits, and
 for those two it also bounds each request that person is waiting behind."""

@@ -135,7 +135,7 @@ def load_credentials() -> GoogleCredentials | None:
 
     A setting that is present but unusable also answers None, after one warning in the log that
     says which field is at fault: a household should see "not set up" rather than a sync that
-    fails every hour.
+    fails every few minutes.
     """
 
     raw = get_app_settings().GOOGLE_CALENDAR_CREDENTIALS
