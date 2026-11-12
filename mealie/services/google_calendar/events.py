@@ -131,12 +131,6 @@ def written_date_of(event: dict[str, Any]) -> str | None:
     return str(value) if value else None
 
 
-def changed_at(event: dict[str, Any]) -> datetime | None:
-    """When the event was last changed on Google's side, by anyone."""
-
-    return _instant(event.get("updated"))
-
-
 def _instant(value: Any) -> datetime | None:
     """The moment a `dateTime` names, or None when it is missing or names none."""
 

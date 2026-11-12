@@ -1299,8 +1299,7 @@
     "last-synced": "Last synced {when}",
     "never-synced": "Not synced yet",
     "last-error": "The last sync failed: {error}",
-    "open-calendar": "Open Family calendar",
-    "synced-moved": "Calendar synced: {moved} moved in Mealie to match Google Calendar, {created} added, {updated} changed, {deleted} removed"
+    "open-calendar": "Open Family calendar"
   },
   "feedback": {
     "title": "Not for me",

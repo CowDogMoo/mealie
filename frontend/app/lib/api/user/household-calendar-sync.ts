@@ -25,7 +25,7 @@ export class HouseholdCalendarSyncAPI extends BaseAPI {
 
   /**
    * Sync now: follow any event moved to another day in Google Calendar, then make the calendar match
-   * the plan. Answers with how many meals moved and how many events were added, changed and removed.
+   * the plan. Answers with how many events were added, changed and removed.
    */
   async sync() {
     return await this.requests.post<CalendarSyncResult>(routes.calendarSyncNow, {});

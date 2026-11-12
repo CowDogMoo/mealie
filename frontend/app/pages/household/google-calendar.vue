@@ -247,20 +247,16 @@ async function syncNow() {
   try {
     const { data, error } = await api.calendarSync.sync();
     if (data) {
-      const counts = {
-        created: data.created ?? 0,
-        updated: data.updated ?? 0,
-        deleted: data.deleted ?? 0,
-        // meals whose event somebody moved to another day in Google Calendar
-        moved: data.moved ?? 0,
-      };
-      const changed = counts.created + counts.updated + counts.deleted;
-      if (counts.moved) {
-        alert.success(i18n.t("calendar-sync.synced-moved", counts));
-      }
-      else {
-        alert.success(changed ? i18n.t("calendar-sync.synced", counts) : i18n.t("calendar-sync.synced-no-changes"));
-      }
+      const changed = (data.created ?? 0) + (data.updated ?? 0) + (data.deleted ?? 0);
+      alert.success(
+        changed
+          ? i18n.t("calendar-sync.synced", {
+              created: data.created ?? 0,
+              updated: data.updated ?? 0,
+              deleted: data.deleted ?? 0,
+            })
+          : i18n.t("calendar-sync.synced-no-changes"),
+      );
     }
     else if (!refusalOf(error)) {
       // a refusal with a sentence of its own has already been shown by the request layer

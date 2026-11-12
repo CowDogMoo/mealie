@@ -251,15 +251,15 @@ now" does it at once. The rules:
 | Time changed, same day                 | Nothing; the event is put back to 6 to 8 PM                              |
 | Title or description changed           | Nothing; the event's text is put back to the plan's                      |
 | Event deleted                          | Nothing is deleted; the event is written again                           |
-| Moved there *and* in Mealie since the last sync | The newer of the two moves wins; the other is overwritten      |
+| Moved there *and* in Mealie since the last sync | Mealie's day stands; the event is put on it                    |
 
 Only the day comes back, and it is read in the server's `TZ`, the same zone the event was written
 in. A move is recognized by a third private property on every event, `mealieDate`, the day Mealie
 last put the event on: dragging an event changes its day and leaves the property, so the two
 disagree only when the move was made in Google. If the entry's own date still equals `mealieDate`,
-only Google moved it. If the entry's date changed too (Mealie's push failed, or has not run yet),
-both sides moved it, and Google's `updated` time on the event is compared with the entry's own
-`update_at`; a tie, or a time that cannot be read, goes to Mealie. Things to know:
+only Google moved it, and the entry follows. If the entry's date changed too (Mealie's push failed,
+or has not run yet), Mealie moved it as well, and Mealie's day stands: the push that follows puts
+the event there. Things to know:
 
 - An event written before this existed has no `mealieDate`, and a different day on it is not read
   as a move. The first sync after the upgrade stamps every event in the window (one patch each),
@@ -270,13 +270,20 @@ both sides moved it, and Google's `updated` time on the event is compared with t
   that is no longer seen, so its meal stays where it was and gets a new event there.
 - A copy of an event made in Google Calendar ("Duplicate") carries the same properties. It is not
   a second meal: the sync keeps the older event and deletes the copy.
-- `CalendarSyncResult` gained `moved`, the number of meals a sync moved in Mealie; the page's
-  "Sync now" message says so when it is not zero.
 
 The planner page has an **"Open Family calendar"** button beside its settings link
 (`<GroupMealPlanCalendarLink>`) whenever the household's mirror is on. It opens
 `https://calendar.google.com/calendar/r?cid=<calendar id>` in a new tab: the Google Calendar app
 on a phone that has it, the site otherwise. Nothing of Google's is shown inside Mealie.
+
+That button and the move read-back above are what this fork has in place of showing Google
+Calendar inside the planner. An embedded calendar was built first, behind a server setting,
+`MEAL_PLAN_CALENDAR_VIEW`, and dropped: Google's embed cannot load a private calendar inside Mealie
+on an iPhone (it fails in the home-screen app, and Safari wants a Google sign-in and cookie
+prompts first). Neither the embed nor the setting exists, and no server setting took its place.
+The switch is the household's own, on `/household/google-calendar`: with a calendar linked and the
+mirror on, the button shows and moves made in Google are read back; with the mirror off, or no
+calendar linked, neither happens.
 
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`

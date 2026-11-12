@@ -7,9 +7,9 @@ POST   /api/households/calendar-sync/sync    sync now, and say what changed    (
 ```
 
 The plan is pushed to the calendar, and the only thing read back is the day of an event somebody
-moved in Google Calendar, which moves its plan entry (`moved` in a sync's answer). The Google
-credential is the server's (`GOOGLE_CALENDAR_CREDENTIALS`) and no route here returns it or any part of it;
-`GET` gives only the address a household shares its calendar with.
+moved in Google Calendar, which moves its plan entry. The Google credential is the server's
+(`GOOGLE_CALENDAR_CREDENTIALS`) and no route here returns it or any part of it; `GET` gives only
+the address a household shares its calendar with.
 
 The household is fixed by the caller's token through the repository's own filters; no body or
 query parameter can name another one.
@@ -65,7 +65,7 @@ class CalendarSyncController(BaseUserController):
     @router.post("/sync", response_model=CalendarSyncResult)
     def sync_now(self) -> CalendarSyncResult:
         """Sync now: follow any event moved to another day in Google Calendar, then make the
-        calendar match the plan. Reports how many meals moved and how many events that took.
+        calendar match the plan. Reports how many events that took.
 
         Refused (409) while the household has not turned its mirror on, or the server has no
         credentials. A sync that fails is a 502, and is also what `lastError` then says: a failure

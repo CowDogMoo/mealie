@@ -26,7 +26,6 @@ from mealie.services.google_calendar.events import (
 from mealie.services.household_services.calendar_sync import (
     CalendarSyncTimeZoneError,
     HouseholdSyncGate,
-    google_moved_last,
     reconcile,
     server_zone,
     window_start,
@@ -257,7 +256,7 @@ def test_a_timed_event_is_put_back_to_all_day_and_a_dropped_recipe_loses_its_lin
     first_day = date(2026, 11, 11)
 
     with_recipe = entry(entry_type="lunch")
-    assert reconciled(google, [with_recipe], first_day) == {"created": 1, "updated": 0, "deleted": 0, "moved": 0}
+    assert reconciled(google, [with_recipe], first_day) == {"created": 1, "updated": 0, "deleted": 0}
     [event] = google.events(CALENDAR)
 
     # somebody drags it to 6pm in Google Calendar...
@@ -268,7 +267,7 @@ def test_a_timed_event_is_put_back_to_all_day_and_a_dropped_recipe_loses_its_lin
     # ...and the plan swaps the recipe for a note
     note = entry(recipe=None, title="Leftovers", entry_type="lunch")
 
-    assert reconciled(google, [note], first_day) == {"created": 0, "updated": 1, "deleted": 0, "moved": 0}
+    assert reconciled(google, [note], first_day) == {"created": 0, "updated": 1, "deleted": 0}
 
     [after] = google.events(CALENDAR)
     assert after["id"] == event["id"]
@@ -277,7 +276,7 @@ def test_a_timed_event_is_put_back_to_all_day_and_a_dropped_recipe_loses_its_lin
     assert after["end"] == {"date": "2026-11-13"}
     assert "source" not in after
 
-    assert reconciled(google, [note], first_day) == {"created": 0, "updated": 0, "deleted": 0, "moved": 0}
+    assert reconciled(google, [note], first_day) == {"created": 0, "updated": 0, "deleted": 0}
 
 
 def old_all_day_body(plan_entry: ReadPlanEntry) -> dict[str, Any]:
@@ -299,7 +298,7 @@ def test_an_all_day_dinner_from_an_older_sync_is_given_its_hour_in_place():
     old = google.seed_event(CALENDAR, old_all_day_body(dinner))
     google.seed_event(CALENDAR, body(lunch))
 
-    assert reconciled(google, [dinner, lunch], first_day) == {"created": 0, "updated": 1, "deleted": 0, "moved": 0}
+    assert reconciled(google, [dinner, lunch], first_day) == {"created": 0, "updated": 1, "deleted": 0}
 
     events = {e["extendedProperties"]["private"][ENTRY_PROPERTY]: e for e in google.events(CALENDAR)}
     assert len(google.events(CALENDAR)) == 2, "no second event for the dinner"
@@ -314,7 +313,7 @@ def test_an_all_day_dinner_from_an_older_sync_is_given_its_hour_in_place():
     assert events["42"]["start"] == {"date": "2026-11-12"}
 
     # and the timed event is recognised as the entry's own from then on
-    assert reconciled(google, [dinner, lunch], first_day) == {"created": 0, "updated": 0, "deleted": 0, "moved": 0}
+    assert reconciled(google, [dinner, lunch], first_day) == {"created": 0, "updated": 0, "deleted": 0}
 
 
 def test_a_dinner_handed_back_in_the_calendars_own_zone_is_left_alone():
@@ -323,7 +322,7 @@ def test_a_dinner_handed_back_in_the_calendars_own_zone_is_left_alone():
     first_day = date(2026, 11, 11)
 
     dinner = entry()
-    assert reconciled(google, [dinner], first_day) == {"created": 1, "updated": 0, "deleted": 0, "moved": 0}
+    assert reconciled(google, [dinner], first_day) == {"created": 1, "updated": 0, "deleted": 0}
     [event] = google.events(CALENDAR)
 
     # Google answers in the calendar's zone, whatever zone the event was written in
@@ -332,7 +331,7 @@ def test_a_dinner_handed_back_in_the_calendars_own_zone_is_left_alone():
         "end": {"dateTime": "2026-11-13T03:00:00Z", "timeZone": "UTC"},
     }
 
-    assert reconciled(google, [dinner], first_day) == {"created": 0, "updated": 0, "deleted": 0, "moved": 0}
+    assert reconciled(google, [dinner], first_day) == {"created": 0, "updated": 0, "deleted": 0}
 
 
 def test_an_eaten_dinner_is_a_record_even_when_the_calendar_puts_its_evening_on_the_next_day():
@@ -347,7 +346,7 @@ def test_an_eaten_dinner_is_a_record_even_when_the_calendar_puts_its_evening_on_
         | {"start": {"dateTime": "2026-11-11T01:00:00Z"}, "end": {"dateTime": "2026-11-11T03:00:00Z"}},
     )
 
-    assert reconciled(google, [], first_day) == {"created": 0, "updated": 0, "deleted": 0, "moved": 0}
+    assert reconciled(google, [], first_day) == {"created": 0, "updated": 0, "deleted": 0}
     assert [event["id"] for event in google.events(CALENDAR)] == [eaten["id"]]
 
 
@@ -360,7 +359,7 @@ def test_an_entry_moved_from_before_the_window_into_it_takes_its_event_along():
     google.seed_event(CALENDAR, body(was))
 
     now = entry(on=date(2026, 11, 14))
-    assert reconciled(google, [now], first_day) == {"created": 0, "updated": 1, "deleted": 0, "moved": 0}
+    assert reconciled(google, [now], first_day) == {"created": 0, "updated": 1, "deleted": 0}
 
     [event] = google.events(CALENDAR)
     assert event["start"] == {"dateTime": "2026-11-14T18:00:00-07:00", "timeZone": "America/Denver"}
@@ -416,7 +415,7 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
     assert calendar.deleted == ["stale"]
     assert calendar.patched == []
     assert calendar.inserted == [wanted]
-    assert result.model_dump() == {"created": 1, "updated": 0, "deleted": 1, "moved": 0}
+    assert result.model_dump() == {"created": 1, "updated": 0, "deleted": 1}
 
 
 @pytest.mark.parametrize("named", ["America/Denver", ":America/Denver"])
@@ -577,31 +576,3 @@ def test_a_sync_that_raises_still_opens_the_gate():
 
     assert gate.run_unless_queued("h1", lambda: "fine") == "fine"
     assert gate._queued == set()
-
-
-# ---------------------------------------------------------------------------
-# which side moved a meal last
-
-
-@pytest.mark.parametrize(
-    ("event_updated", "entry_changed", "expected"),
-    [
-        ("2026-11-11T18:00:01.000Z", datetime(2026, 11, 11, 18, 0, 0, tzinfo=UTC), True),
-        ("2026-11-11T17:59:59.000Z", datetime(2026, 11, 11, 18, 0, 0, tzinfo=UTC), False),
-        # the same moment is not "after": the plan keeps its date
-        ("2026-11-11T18:00:00.000Z", datetime(2026, 11, 11, 18, 0, 0, tzinfo=UTC), False),
-        # Mealie's own timestamps are UTC and come back without saying so
-        ("2026-11-11T18:00:01.000Z", datetime(2026, 11, 11, 18, 0, 0), True),  # noqa: DTZ001
-        ("2026-11-11T11:00:01-07:00", datetime(2026, 11, 11, 18, 0, 0), True),  # noqa: DTZ001
-        # a time that is missing or unreadable, on either side, leaves the plan as it is
-        (None, datetime(2026, 11, 11, 18, 0, 0, tzinfo=UTC), False),
-        ("yesterday", datetime(2026, 11, 11, 18, 0, 0, tzinfo=UTC), False),
-        ("2026-11-11T18:00:01.000Z", None, False),
-    ],
-)
-def test_google_moved_last_only_when_its_change_is_known_to_be_the_later(
-    event_updated: str | None, entry_changed: datetime | None, expected: bool
-):
-    event = {"updated": event_updated} if event_updated else {}
-
-    assert google_moved_last(event, entry_changed) is expected

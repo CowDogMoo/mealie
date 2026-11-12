@@ -24,7 +24,6 @@ export interface CalendarSyncResult {
   created?: number;
   updated?: number;
   deleted?: number;
-  moved?: number;
 }
 export interface CalendarSyncSave {
   calendarId?: string | null;

@@ -82,11 +82,8 @@ class CalendarSyncStatus(MealieModel):
 
 
 class CalendarSyncResult(MealieModel):
-    """What one sync changed. All zeroes means the calendar and the plan already matched."""
+    """What one sync changed on the calendar. All zeroes means it already matched the plan."""
 
     created: int = 0
     updated: int = 0
     deleted: int = 0
-    moved: int = 0
-    """Plan entries moved to another day in Mealie because their event was moved in Google
-    Calendar. The other three count changes made to the calendar."""

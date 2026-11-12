@@ -297,18 +297,6 @@ describe("sync now", () => {
     expect(part(wrapper, "calendar-sync-last-synced").text()).toContain("Last synced");
   });
 
-  test("says so when meals moved in Mealie because their events were moved in Google Calendar", async () => {
-    sync.mockResolvedValue({ data: { created: 0, updated: 2, deleted: 0, moved: 2 }, error: null });
-    const wrapper = await mountPage();
-
-    await pressSyncNow(wrapper);
-
-    expect(alertSuccess).toHaveBeenCalledTimes(1);
-    expect(alertSuccess).toHaveBeenCalledWith(
-      "Calendar synced: 2 moved in Mealie to match Google Calendar, 0 added, 2 changed, 0 removed",
-    );
-  });
-
   test("a calendar that already matched is reported as that, not as zeroes", async () => {
     sync.mockResolvedValue({ data: { created: 0, updated: 0, deleted: 0 }, error: null });
     const wrapper = await mountPage();
