@@ -5,7 +5,8 @@ extended property* -- a key/value pair Google stores on the event, hides from th
 lets the API filter on. A second property names the plan entry. Those two are the whole link
 between a plan and a calendar: nothing in Mealie's database remembers an event id, so the link
 cannot go stale, and an event without the household's property is by definition somebody's own
-and is never read as ours.
+and is never read as ours. A third property is no part of that link: it holds the day Mealie last
+put the event on, which is how a move made in Google Calendar is recognized (`DATE_PROPERTY`).
 """
 
 from datetime import date, datetime, time, timedelta, tzinfo

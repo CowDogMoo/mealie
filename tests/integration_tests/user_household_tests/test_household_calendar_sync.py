@@ -13,8 +13,9 @@ set off has already run against the fake.
 The properties that carry the feature, each with a test: the calendar's events equal the plan after
 every change; a second sync changes nothing; a duplicate is removed; an event without this
 household's mark is never touched; one household's mirror is invisible to another's; a Google
-failure neither fails the plan change nor goes unrecorded, and heals; and a household that is not
-set up costs Google nothing.
+failure neither fails the plan change nor goes unrecorded, and heals; an event moved to another day
+in Google Calendar moves its plan entry, and nothing else done there changes the plan; and a
+household that is not set up costs Google nothing.
 
 `unique_user` and `h2_user` are module-scoped, so the autouse fixture empties both plans and turns
 both mirrors off on the way in and on the way out.
