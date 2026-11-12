@@ -13,8 +13,9 @@ set off has already run against the fake.
 The properties that carry the feature, each with a test: the calendar's events equal the plan after
 every change; a second sync changes nothing; a duplicate is removed; an event without this
 household's mark is never touched; one household's mirror is invisible to another's; a Google
-failure neither fails the plan change nor goes unrecorded, and heals; and a household that is not
-set up costs Google nothing.
+failure neither fails the plan change nor goes unrecorded, and heals; an event moved to another day
+in Google Calendar moves its plan entry, and nothing else done there changes the plan; and a
+household that is not set up costs Google nothing.
 
 `unique_user` and `h2_user` are module-scoped, so the autouse fixture empties both plans and turns
 both mirrors off on the way in and on the way out.
@@ -51,6 +52,7 @@ OTHER_CALENDAR = "someone-elses@group.calendar.google.com"
 
 HOUSEHOLD_PROPERTY = "mealieHousehold"
 ENTRY_PROPERTY = "mealieEntry"
+DATE_PROPERTY = "mealieDate"
 
 # the zone the server is told it is in: `clean_slate` sets `TZ` to it for every test
 ZONE = ZoneInfo("America/Denver")
@@ -139,7 +141,9 @@ def owned_event(household_id: str, entry_id: int | str, on: str, summary: str = 
         "start": {"date": on},
         "end": {"date": (date.fromisoformat(on) + timedelta(days=1)).isoformat()},
         "transparency": "transparent",
-        "extendedProperties": {"private": {HOUSEHOLD_PROPERTY: household_id, ENTRY_PROPERTY: str(entry_id)}},
+        "extendedProperties": {
+            "private": {HOUSEHOLD_PROPERTY: household_id, ENTRY_PROPERTY: str(entry_id), DATE_PROPERTY: on}
+        },
     }
 
 
@@ -377,7 +381,11 @@ def test_creating_updating_and_deleting_an_entry_is_mirrored(
     assert event["transparency"] == "transparent"
     assert event["source"] == {"title": recipe["name"], "url": link}
     assert event["extendedProperties"] == {
-        "private": {HOUSEHOLD_PROPERTY: unique_user.household_id, ENTRY_PROPERTY: str(entry["id"])}
+        "private": {
+            HOUSEHOLD_PROPERTY: unique_user.household_id,
+            ENTRY_PROPERTY: str(entry["id"]),
+            DATE_PROPERTY: day(),
+        }
     }
 
     after_create = status(api_client, unique_user)
@@ -398,6 +406,7 @@ def test_creating_updating_and_deleting_an_entry_is_mirrored(
     assert moved["description"] == ""
     assert moved["start"] == {"date": day(1)}
     assert moved["end"] == {"date": day(2)}
+    assert moved["extendedProperties"]["private"][DATE_PROPERTY] == day(1)
     assert "source" not in moved
 
     # deleted
@@ -696,7 +705,7 @@ def test_a_server_without_a_usable_time_zone_changes_nothing_and_says_why(
         monkeypatch.setenv("TZ", tz)
 
     # every trigger there is: a plan change that would add an event, one that would delete one,
-    # the hourly sweep, and somebody asking. `plan` and `unplan` assert the plan change succeeds.
+    # the sweep, and somebody asking. `plan` and `unplan` assert the plan change succeeds.
     added = plan(api_client, unique_user, day(2), title="Chili")
     unplan(api_client, unique_user, goes["id"])
     sync_google_calendars()
@@ -722,7 +731,7 @@ def test_a_server_without_a_usable_time_zone_changes_nothing_and_says_why(
     assert (after[str(added["id"])]["start"], after[str(added["id"])]["end"]) == dinner_time(2)
 
 
-def test_the_hourly_sweep_heals_a_sync_that_failed(
+def test_the_sweep_heals_a_sync_that_failed(
     api_client: TestClient, unique_user: TestUser, h2_user: TestUser, mirrored: FakeGoogleCalendar
 ):
     # h2 has a calendar noted but its mirror is off: the sweep must leave it alone
@@ -745,6 +754,312 @@ def test_the_hourly_sweep_heals_a_sync_that_failed(
     assert mirrored.events(OTHER_CALENDAR) == []
     assert all(path.startswith(CALENDAR) for _, path, _ in mirrored.calls)
     assert status(api_client, h2_user)["lastSyncedAt"] is None
+
+
+# ---------------------------------------------------------------------------
+# the one thing that comes back from Google: the day
+
+
+def plan_entry(api_client: TestClient, user: TestUser, entry_id: int) -> dict:
+    return assert_deserialize(
+        api_client.get(api_routes.households_mealplans_item_id(entry_id), headers=user.token), 200
+    )
+
+
+def reschedule(api_client: TestClient, user: TestUser, entry: dict, on: str) -> None:
+    """Move an entry to another day in Mealie, through the real endpoint."""
+
+    response = api_client.put(
+        api_routes.households_mealplans_item_id(entry["id"]), json={**entry, "date": on}, headers=user.token
+    )
+    assert response.status_code == 200, response.text
+
+
+def drag(google: FakeGoogleCalendar, event: dict, offset: int) -> None:
+    """Drag a dinner's event to another day in Google Calendar, keeping its hours."""
+
+    start, end = dinner_time(offset)
+    google.edit_event(CALENDAR, event["id"], {"start": start, "end": end})
+
+
+def test_a_dinner_moved_to_another_day_in_google_moves_in_mealie(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos", text="Double it")
+    other = plan(api_client, unique_user, day(1), title="Fish Pie")
+    [event, untouched] = mirrored.events(CALENDAR)
+
+    drag(mirrored, event, 2)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    after = plan_entry(api_client, unique_user, entry["id"])
+    assert after["date"] == day(2)
+    # only the day came back: the rest of the entry is as Mealie had it
+    assert {k: v for k, v in after.items() if k != "date"} == {k: v for k, v in entry.items() if k != "date"}
+    assert plan_entry(api_client, unique_user, other["id"])["date"] == day(1)
+
+    [moved, still] = mirrored.events(CALENDAR)
+    assert moved["id"] == event["id"], "the event that was dragged is the entry's event still"
+    assert (moved["start"], moved["end"]) == dinner_time(2)
+    assert moved["extendedProperties"]["private"][DATE_PROPERTY] == day(2)
+    assert still == untouched
+
+    # the move is settled: the next sync finds nothing to do on either side
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(2)
+
+
+def test_the_sweep_is_what_picks_up_a_move_nobody_asked_mealie_about(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    drag(mirrored, event, -1)
+    sync_google_calendars()
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(-1)
+    [moved] = mirrored.events(CALENDAR)
+    assert (moved["start"], moved["end"]) == dinner_time(-1)
+
+
+def test_a_meal_dragged_onto_another_day_as_an_all_day_event_moves_and_gets_its_hours_back(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # dragged into the all-day strip of the day after
+    mirrored.edit_event(CALENDAR, event["id"], {"start": {"date": day(1)}, "end": {"date": day(2)}})
+
+    sync_now(api_client, unique_user)
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(1)
+    [moved] = mirrored.events(CALENDAR)
+    assert (moved["start"], moved["end"]) == dinner_time(1), "the day is Google's, the hours are Mealie's"
+
+
+def test_an_event_nobody_moved_moves_nothing(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    before = mirrored.events(CALENDAR)
+    mirrored.calls.clear()
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"]) == entry
+    assert mirrored.events(CALENDAR) == before
+    assert mirrored.writes() == []
+
+
+def test_a_new_time_on_the_same_day_changes_nothing_in_mealie(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # somebody made dinner an hour and a half earlier, and longer
+    earlier = datetime.combine(DAY, time(16, 30), tzinfo=ZONE)
+    mirrored.edit_event(
+        CALENDAR,
+        event["id"],
+        {
+            "start": {"dateTime": earlier.isoformat(), "timeZone": ZONE.key},
+            "end": {"dateTime": (earlier + timedelta(hours=4)).isoformat(), "timeZone": ZONE.key},
+        },
+    )
+
+    result = sync_now(api_client, unique_user)
+
+    assert plan_entry(api_client, unique_user, entry["id"]) == entry
+    # and the event is put back to six to eight, as any other drift from the plan is
+    assert result["updated"] == 1
+    [restored] = mirrored.events(CALENDAR)
+    assert (restored["start"], restored["end"]) == dinner_time()
+
+
+def test_a_new_title_or_description_in_google_changes_nothing_in_mealie(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos", text="Double it")
+    [event] = mirrored.events(CALENDAR)
+
+    mirrored.edit_event(CALENDAR, event["id"], {"summary": "Takeout?", "description": "Too tired"})
+
+    sync_now(api_client, unique_user)
+
+    assert plan_entry(api_client, unique_user, entry["id"]) == entry
+    [restored] = mirrored.events(CALENDAR)
+    assert restored["summary"] == "Dinner: Lentil Tacos"
+    assert restored["description"] == "Double it"
+
+
+def test_an_event_deleted_in_google_does_not_delete_the_meal(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # deleted by hand in Google Calendar: Google keeps it as a cancelled event
+    mirrored.edit_event(CALENDAR, event["id"], {"status": "cancelled"})
+    assert mirrored.events(CALENDAR) == []
+
+    assert sync_now(api_client, unique_user) == {"created": 1, "updated": 0, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"]) == entry
+    [rewritten] = mirrored.events(CALENDAR)
+    assert rewritten["id"] != event["id"]
+    assert rewritten["summary"] == "Dinner: Lentil Tacos"
+    assert (rewritten["start"], rewritten["end"]) == dinner_time()
+
+
+def test_an_event_moved_and_then_deleted_in_google_moves_nothing(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    drag(mirrored, event, 2)
+    mirrored.edit_event(CALENDAR, event["id"], {"status": "cancelled"})
+
+    sync_now(api_client, unique_user)
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+
+
+def test_a_meal_moved_in_mealie_too_keeps_the_day_mealie_gave_it(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # Google is down while Mealie moves the meal, so the event is not told; then it is dragged
+    mirrored.fail_calendar_calls(503)
+    reschedule(api_client, unique_user, entry, day(1))
+    mirrored.fail_calendar_calls(None)
+    drag(mirrored, event, 2)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(1)
+    [event] = mirrored.events(CALENDAR)
+    assert (event["start"], event["end"]) == dinner_time(1), "the event goes where Mealie put the meal"
+    assert event["extendedProperties"]["private"][DATE_PROPERTY] == day(1)
+
+
+# the day before the window opens: read from the calendar still, mirrored to it no longer
+EATEN = -4
+
+
+def test_a_dinner_dragged_to_before_the_window_moves_there_and_back_again(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # dragged back to the day it was cooked on
+    drag(mirrored, event, EATEN)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(EATEN)
+    [eaten] = mirrored.events(CALENDAR)
+    assert eaten["id"] == event["id"]
+    assert (eaten["start"], eaten["end"]) == dinner_time(EATEN)
+    assert eaten["extendedProperties"]["private"][DATE_PROPERTY] == day(EATEN), "the event says where Mealie has it"
+
+    # from then on it is a record: nothing more to do
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
+
+    # dragged forward again, to the very day it started on
+    drag(mirrored, eaten, 0)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+    [back] = mirrored.events(CALENDAR)
+    assert back["id"] == event["id"], "the event is followed, not deleted"
+    assert (back["start"], back["end"]) == dinner_time()
+    assert back["extendedProperties"]["private"][DATE_PROPERTY] == day()
+
+
+def test_a_meal_put_back_in_mealie_after_a_drag_to_before_the_window_stays_put(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+    drag(mirrored, event, EATEN)
+    sync_now(api_client, unique_user)
+
+    # changed in Mealie, which syncs as it happens
+    reschedule(api_client, unique_user, entry, day())
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+    [restored] = mirrored.events(CALENDAR)
+    assert restored["id"] == event["id"]
+    assert (restored["start"], restored["end"]) == dinner_time()
+    assert restored["extendedProperties"]["private"][DATE_PROPERTY] == day()
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 0, "deleted": 0}
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+
+
+def test_a_move_to_before_the_window_that_google_was_not_told_about_is_told_by_the_next_sync(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # where a sync leaves things when it moves the meal and Google then fails: the meal and its
+    # event on the same day, and the event still saying the old one
+    mirrored.fail_calendar_calls(503)
+    reschedule(api_client, unique_user, entry, day(EATEN))
+    mirrored.fail_calendar_calls(None)
+    drag(mirrored, event, EATEN)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day(EATEN)
+    [eaten] = mirrored.events(CALENDAR)
+    assert eaten["id"] == event["id"]
+    assert eaten["extendedProperties"]["private"][DATE_PROPERTY] == day(EATEN)
+
+
+def test_an_event_from_before_moves_were_followed_is_not_read_as_a_move(
+    api_client: TestClient, unique_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    entry = plan(api_client, unique_user, day(), title="Lentil Tacos")
+    [event] = mirrored.events(CALENDAR)
+
+    # an event written by the mirror before it kept the day: no record of where Mealie put it,
+    # and by now on another day than the entry
+    stored = mirrored.calendars[CALENDAR][event["id"]]
+    del stored["extendedProperties"]["private"][DATE_PROPERTY]
+    drag(mirrored, event, 2)
+
+    assert sync_now(api_client, unique_user) == {"created": 0, "updated": 1, "deleted": 0}
+
+    assert plan_entry(api_client, unique_user, entry["id"])["date"] == day()
+    [restored] = mirrored.events(CALENDAR)
+    assert (restored["start"], restored["end"]) == dinner_time()
+    assert restored["extendedProperties"]["private"][DATE_PROPERTY] == day(), "and from now on it has one"
+
+
+def test_a_move_in_one_households_calendar_cannot_move_another_households_meal(
+    api_client: TestClient, unique_user: TestUser, h2_user: TestUser, mirrored: FakeGoogleCalendar
+):
+    theirs = plan(api_client, h2_user, day(), title="Fish Pie")
+
+    # an event in this household's mirror that names the other household's entry, moved
+    forged = owned_event(unique_user.household_id, theirs["id"], day())
+    seeded = mirrored.seed_event(CALENDAR, forged)
+    mirrored.edit_event(CALENDAR, seeded["id"], {"start": {"date": day(2)}, "end": {"date": day(3)}})
+
+    sync_now(api_client, unique_user)
+
+    assert plan_entry(api_client, h2_user, theirs["id"])["date"] == day()
 
 
 # ---------------------------------------------------------------------------

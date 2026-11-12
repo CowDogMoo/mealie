@@ -39,7 +39,7 @@ class HouseholdCalendarSyncModel(SqlAlchemyBase, BaseMixins):
 
     calendar_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    # FilterableColumn rather than Mapped: the hourly sweep asks for every enabled row
+    # FilterableColumn rather than Mapped: the sweep asks for every enabled row
     enabled: FilterableColumn[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
 
     last_synced_at: Mapped[datetime | None] = mapped_column(NaiveDateTime, nullable=True)

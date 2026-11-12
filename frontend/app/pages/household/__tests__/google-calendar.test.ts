@@ -157,7 +157,8 @@ describe("a server that can reach Google", () => {
   test("explains itself, shows the account to share with, and walks through the three steps", async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.text()).toContain("It goes one way only");
+    expect(wrapper.text()).toContain("Change the plan in Mealie and the calendar follows");
+    expect(wrapper.text()).toContain("Move a meal to another day in Google Calendar and Mealie follows");
     expect(part(wrapper, "calendar-sync-not-configured").exists()).toBe(false);
 
     expect(part(wrapper, "calendar-sync-account").text()).toBe(ACCOUNT);

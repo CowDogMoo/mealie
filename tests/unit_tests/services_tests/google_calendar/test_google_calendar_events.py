@@ -14,6 +14,7 @@ from mealie.schema.recipe.recipe import RecipeSummary
 from mealie.services.google_calendar.client import GoogleCalendarClient
 from mealie.services.google_calendar.credentials import AccessTokenCache
 from mealie.services.google_calendar.events import (
+    DATE_PROPERTY,
     ENTRY_PROPERTY,
     HOUSEHOLD_PROPERTY,
     belongs_to,
@@ -25,6 +26,7 @@ from mealie.services.google_calendar.events import (
 from mealie.services.household_services.calendar_sync import (
     CalendarSyncTimeZoneError,
     HouseholdSyncGate,
+    list_mirror,
     reconcile,
     server_zone,
     window_start,
@@ -71,7 +73,9 @@ def test_a_dinner_becomes_an_event_from_six_to_eight_that_blocks_nobodys_time():
         "end": {"dateTime": "2026-11-12T20:00:00-07:00", "timeZone": "America/Denver"},
         "transparency": "transparent",
         "source": {"title": "Lentil Tacos", "url": "https://mealie.example.test/g/home/r/lentil-tacos"},
-        "extendedProperties": {"private": {HOUSEHOLD_PROPERTY: HOUSEHOLD, ENTRY_PROPERTY: "41"}},
+        "extendedProperties": {
+            "private": {HOUSEHOLD_PROPERTY: HOUSEHOLD, ENTRY_PROPERTY: "41", DATE_PROPERTY: "2026-11-12"}
+        },
     }
 
 
@@ -100,7 +104,9 @@ def test_every_other_kind_of_meal_is_still_an_all_day_event(kind: str):
     assert event["start"] == {"date": "2026-11-12"}
     assert event["end"] == {"date": "2026-11-13"}
     assert event["transparency"] == "transparent"
-    assert event["extendedProperties"] == {"private": {HOUSEHOLD_PROPERTY: HOUSEHOLD, ENTRY_PROPERTY: "41"}}
+    assert event["extendedProperties"] == {
+        "private": {HOUSEHOLD_PROPERTY: HOUSEHOLD, ENTRY_PROPERTY: "41", DATE_PROPERTY: "2026-11-12"}
+    }
 
 
 def test_an_entry_that_is_only_a_note_uses_its_title_and_links_nowhere():
@@ -241,7 +247,8 @@ def test_a_timed_events_day_is_read_in_the_zone_it_was_written_in():
 def reconciled(google: FakeGoogleCalendar, plan: list[ReadPlanEntry], first_day: date) -> dict[str, int]:
     with google.client() as http:
         client = GoogleCalendarClient(service_account_credentials(), http, AccessTokenCache())
-        result = reconcile(client, CALENDAR, HOUSEHOLD, {str(e.id): body(e) for e in plan}, first_day, DENVER)
+        listed = list_mirror(client, CALENDAR, HOUSEHOLD, first_day)
+        result = reconcile(client, CALENDAR, listed, {str(e.id): body(e) for e in plan}, first_day, DENVER)
     return result.model_dump()
 
 
@@ -363,7 +370,7 @@ def test_an_entry_moved_from_before_the_window_into_it_takes_its_event_along():
 class UnfilteredCalendar:
     """A calendar whose list ignores the property filter, as if Google had handed back everything.
 
-    It never should. `reconcile` checks each event's property itself all the same, because that
+    It never should. `list_mirror` checks each event's property itself all the same, because that
     check is the only thing between a sync and somebody's own events, and this is what proves it.
     """
 
@@ -388,7 +395,7 @@ class UnfilteredCalendar:
         self.deleted.append(event_id)
 
 
-def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark():
+def test_a_sync_refuses_to_touch_an_event_without_this_households_mark():
     planned = entry()
     wanted = body(planned)
     day = wanted["start"]
@@ -403,8 +410,11 @@ def test_reconcile_itself_refuses_to_touch_an_event_without_this_households_mark
     ours_but_stale = {**body(entry(entry_id=999)), "id": "stale"}
 
     calendar = UnfilteredCalendar([somebodys_own, neighbours, unmarked_entry, ours_but_stale])
-    result = reconcile(calendar, CALENDAR, HOUSEHOLD, {"41": wanted}, date(2026, 11, 11), DENVER)  # type: ignore[arg-type]
+    first_day = date(2026, 11, 11)
+    listed = list_mirror(calendar, CALENDAR, HOUSEHOLD, first_day)  # type: ignore[arg-type]
+    result = reconcile(calendar, CALENDAR, listed, {"41": wanted}, first_day, DENVER)  # type: ignore[arg-type]
 
+    assert [event["id"] for event in listed] == ["stale"]
     # only the event that is ours is removed; the three that are not are neither patched nor
     # deleted, and none of them counts as entry 41's event, so that one is added
     assert calendar.deleted == ["stale"]

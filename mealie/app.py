@@ -134,11 +134,11 @@ async def start_scheduler():
 
     SchedulerRegistry.register_minutely(
         tasks.post_group_webhooks,
+        sync_google_calendars,
     )
 
     SchedulerRegistry.register_hourly(
         tasks.locked_user_reset,
-        sync_google_calendars,
     )
 
     SchedulerRegistry.print_jobs()

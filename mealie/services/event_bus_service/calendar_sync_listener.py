@@ -7,7 +7,7 @@ entry changed or how.
 
 It runs where the other listeners run: in a background task, after the response to the request
 that changed the plan has been sent. A Google outage therefore cannot fail that request or hold it
-up; the failure is written to the household's settings row and the hourly sweep tries again.
+up; the failure is written to the household's settings row and the sweep tries again.
 """
 
 from pydantic import UUID4

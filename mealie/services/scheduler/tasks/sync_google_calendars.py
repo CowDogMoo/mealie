@@ -1,7 +1,10 @@
-"""Hourly: reconcile every household that mirrors its meal plan to Google Calendar.
+"""Every few minutes: sync every household that mirrors its meal plan to Google Calendar.
 
-Plan changes sync as they happen, so on a good day this finds nothing to do. It is here for the
-other days: a sync that failed while Google was unreachable, a pod that restarted between a plan
+Registered with the scheduler's "minutely" tasks, which run every five minutes. Plan changes made
+in Mealie sync as they happen, so this is here for what Mealie is never told about. First among
+those is a dinner dragged to another day in Google Calendar, which only a look at the calendar
+finds: this sweep is what makes that move reach the plan within a few minutes. The rest are the
+bad days: a sync that failed while Google was unreachable, a pod that restarted between a plan
 change and its background task, and the changes nothing announces on the event bus -- a recipe
 renamed, or deleted out from under its plan entry.
 """

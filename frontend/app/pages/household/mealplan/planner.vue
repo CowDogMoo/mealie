@@ -80,6 +80,7 @@
         class="ml-auto mr-4"
         @click="addAllToList"
       />
+      <GroupMealPlanCalendarLink :class="{ 'ml-auto': route.name !== TABS.view }" />
       <ButtonLink
         :icon="$globals.icons.calendar"
         :to="`/household/mealplan/settings`"
@@ -100,6 +101,7 @@
 
 <script setup lang="ts">
 import { isSameDay, addDays, parseISO, format, isValid } from "date-fns";
+import GroupMealPlanCalendarLink from "~/components/Domain/Household/GroupMealPlanCalendarLink.vue";
 import RecipeDialogAddToShoppingList from "~/components/Domain/Recipe/RecipeDialogAddToShoppingList.vue";
 import { useHouseholdSelf } from "~/composables/use-households";
 import { useMealplans } from "~/composables/use-group-mealplan";

@@ -1,15 +1,34 @@
 """Mirror a household's meal plan to one Google calendar.
 
 **A sync is a reconcile, not a push of one change.** Whatever caused it -- an entry created,
-moved or deleted, somebody pressing "Sync now", the hourly sweep -- the work is the same: read the
+moved or deleted, somebody pressing "Sync now", the sweep -- the work is the same: read the
 plan, read the calendar's events that carry this household's mark, and make the second equal the
 first. That is why a missed or failed sync costs nothing but time: the next one starts from the
 plan again and has no memory to be wrong.
 
+**One thing comes back: the day.** Before the plan is pushed, the calendar is read for events of
+ours that somebody moved to another day in Google Calendar, and each such move is made to the plan
+entry too (`CalendarSyncService._pull_moves`). Google Calendar is the easy place to drag a dinner
+from Tuesday to Thursday, so that is the one edit made there that counts. Nothing else does: a new
+time, title or description is put back by the push that follows, as before, and an event deleted
+there is written again, because deleting a meal is done in Mealie.
+
+A move is told apart from everything else by a private property on the event holding the day
+Mealie last put it on (`mealieDate`). Dragging the event changes its day and leaves the property,
+so the two disagree exactly when the move was made in Google. If the entry's own date still equals
+the property, only Google moved it and the entry follows. If the entry's date changed as well,
+Mealie moved it too since the last sync, and the plan keeps its date: the push that follows puts
+the event there. An event written before the property existed has no say; the next push gives it
+one.
+
 **The window.** Only entries dated from yesterday onward are mirrored, and only events in that
 window are ever changed or removed. Older events stay as they were: a record of what was eaten.
 "Yesterday" rather than "today" so that a server whose clock is hours ahead of the kitchen does
-not stop caring about tonight's dinner in the middle of the afternoon.
+not stop caring about tonight's dinner in the middle of the afternoon. One event before the window
+is still written to: one somebody dragged there. Its entry follows it like any other, and the push
+that follows includes that entry, so the event is given that day's hours and that day as its
+`mealieDate`. From the next sync on it is a record like the rest, and a later move, on either
+side, is read against the day Mealie really has the entry on.
 
 **When.** A dinner is a timed event, six to eight in the evening in the server's time zone; any
 other meal is an all-day event. Both are marked as not blocking anyone's time. The zone is the one
@@ -49,6 +68,7 @@ from mealie.schema.household.calendar_sync import (
     CalendarSyncStatus,
     CalendarSyncUpdate,
 )
+from mealie.schema.meal_plan.new_meal import ReadPlanEntry
 from mealie.schema.response.pagination import PaginationQuery
 from mealie.services._base_service import BaseService
 from mealie.services.google_calendar import client as google_client
@@ -62,6 +82,7 @@ from mealie.services.google_calendar.events import (
     event_differs,
     patch_body,
     start_date_of,
+    written_date_of,
 )
 
 CREDENTIALS_SETTING = "GOOGLE_CALENDAR_CREDENTIALS"
@@ -185,34 +206,50 @@ def window_start(today: date | None = None) -> date:
     return today - timedelta(days=WINDOW_LOOKBACK_DAYS)
 
 
+def list_mirror(
+    calendar: GoogleCalendarClient, calendar_id: str, household_id: str, first_day: date
+) -> list[dict[str, Any]]:
+    """This household's live events on the calendar, from a little before the window onward."""
+
+    ends_after = datetime.combine(first_day - timedelta(days=LIST_MARGIN_DAYS), time.min, tzinfo=UTC)
+    listed = calendar.list_events(calendar_id, household_id=household_id, ends_after=ends_after)
+
+    # Google already filtered on the property. It is checked again here because what comes out of
+    # this function is what may be deleted, and what may move a plan entry.
+    return [
+        event
+        for event in listed
+        if belongs_to(event, household_id) and event.get("id") and event.get("status") != "cancelled"
+    ]
+
+
+def oldest_first(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The first is the event kept for an entry, so every run agrees on which copies are duplicates."""
+
+    return sorted(events, key=lambda e: (str(e.get("created") or ""), str(e["id"])))
+
+
 def reconcile(
     calendar: GoogleCalendarClient,
     calendar_id: str,
-    household_id: str,
+    listed: list[dict[str, Any]],
     desired: dict[str, dict[str, Any]],
     first_day: date,
     zone: tzinfo,
 ) -> CalendarSyncResult:
     """Make the calendar's events for this household equal `desired`, keyed by plan entry id.
 
+    `listed` is the household's events as `list_mirror` read them; no other event is touched.
     Adds what is missing, patches what no longer matches, and deletes events whose entry is gone
     along with any second event for an entry that already has one. `zone` is the zone the desired
     events were written in; a timed event's day is read there.
     """
 
-    ends_after = datetime.combine(first_day - timedelta(days=LIST_MARGIN_DAYS), time.min, tzinfo=UTC)
-    listed = calendar.list_events(calendar_id, household_id=household_id, ends_after=ends_after)
-
     by_entry: dict[str | None, list[dict[str, Any]]] = {}
     for event in listed:
-        # Google already filtered on the property. It is checked again here because this loop is
-        # what decides which events may be deleted.
-        if not belongs_to(event, household_id) or not event.get("id") or event.get("status") == "cancelled":
-            continue
-
         entry_id = entry_id_of(event)
         if entry_id not in desired and (start_date_of(event, zone) or "") < first_day.isoformat():
-            # before the window and not wanted in it: a dinner that was eaten. Leave it be.
+            # before the window and not wanted: a dinner that was eaten. Leave it be.
             continue
 
         by_entry.setdefault(entry_id, []).append(event)
@@ -227,8 +264,7 @@ def reconcile(
                 result.deleted += 1
             continue
 
-        # the oldest event is the one kept, so repeated runs agree on which copy is the duplicate
-        keeper, *duplicates = sorted(events, key=lambda e: (str(e.get("created") or ""), str(e["id"])))
+        keeper, *duplicates = oldest_first(events)
         for event in duplicates:
             calendar.delete_event(calendar_id, event["id"])
             result.deleted += 1
@@ -291,7 +327,7 @@ class CalendarSyncService(BaseService):
         """Save which calendar to mirror to and whether the mirror is on.
 
         Turning it on is refused unless the calendar can be opened and written to right now, so
-        a wrong id or a calendar nobody shared is found out on this page and not an hour later.
+        a wrong id or a calendar nobody shared is found out on this page and not by a later sync.
         Saving with the mirror off talks to nobody.
         """
 
@@ -398,7 +434,12 @@ class CalendarSyncService(BaseService):
         except CalendarSyncFailedError:
             return None
 
-    def _desired_events(self, first_day: date, zone: ZoneInfo) -> dict[str, dict[str, Any]]:
+    def _desired_events(
+        self, first_day: date, zone: ZoneInfo, followed: list[ReadPlanEntry]
+    ) -> dict[str, dict[str, Any]]:
+        """The event each mirrored entry should have: every entry in the window, and the entries in
+        `followed` wherever they are (see `_pull_moves`)."""
+
         entries = self.repos.meals.page_all(
             PaginationQuery(page=1, per_page=-1, query_filter=f"date >= {first_day.isoformat()}")
         ).items
@@ -414,16 +455,86 @@ class CalendarSyncService(BaseService):
                 group_slug=group_slug,
                 zone=zone,
             )
-            for entry in entries
+            for entry in [*followed, *entries]
         }
+
+    def _pull_moves(self, listed: list[dict[str, Any]], zone: tzinfo) -> list[ReadPlanEntry]:
+        """Move each plan entry whose event was moved to another day in Google Calendar.
+
+        Only the day is taken from Google, and only from the one event kept for an entry. See the
+        module docstring for how a move is recognized.
+
+        Returns the entries that are on their event's day while the event's `mealieDate` still
+        names another: those moved here, and any moved by a sync that then failed to write the
+        calendar. The push has to include them even when that day is before the window, or the
+        event would keep a `mealieDate` that is no longer the entry's day.
+        """
+
+        by_entry: dict[str, list[dict[str, Any]]] = {}
+        for event in listed:
+            entry_id = entry_id_of(event)
+            if entry_id:
+                by_entry.setdefault(entry_id, []).append(event)
+
+        followed: list[ReadPlanEntry] = []
+        for entry_id, events in by_entry.items():
+            event = oldest_first(events)[0]
+            written = written_date_of(event)
+            on_calendar = start_date_of(event, zone)
+            if not written or not on_calendar or on_calendar == written:
+                continue
+
+            try:
+                written_day = date.fromisoformat(written)
+                new_day = date.fromisoformat(on_calendar)
+                key = int(entry_id)
+            except ValueError:
+                continue
+
+            # the repository is this household's, so an id from another household finds nothing
+            entry = self.repos.meals.get_one(key)
+            if entry is None:
+                continue
+
+            if entry.date == written_day:
+                entry = self.repos.meals.update(
+                    entry.id,
+                    {
+                        "id": entry.id,
+                        "group_id": entry.group_id,
+                        "user_id": entry.user_id,
+                        "date": new_day,
+                        "entry_type": entry.entry_type,
+                        "title": entry.title,
+                        "text": entry.text,
+                        "recipe_id": entry.recipe_id,
+                    },
+                )
+                self.logger.info(
+                    "calendar sync for household %s: entry %s moved from %s to %s in Google Calendar",
+                    self.household_id,
+                    entry.id,
+                    written_day,
+                    new_day,
+                )
+
+            # on any other day it was moved in Mealie too: the push that follows puts the event there
+            if entry.date == new_day:
+                followed.append(entry)
+
+        return followed
 
     def _sync(self, row: CalendarSyncOut, credentials: GoogleCredentials) -> CalendarSyncResult:
         try:
             zone = server_zone()
             first_day = window_start()
-            desired = self._desired_events(first_day, zone)
+            calendar_id = row.calendar_id or ""
             with google_client.open_client(credentials) as calendar:
-                result = reconcile(calendar, row.calendar_id or "", self.household_id, desired, first_day, zone)
+                listed = list_mirror(calendar, calendar_id, self.household_id, first_day)
+                # the calendar's say comes first, so the plan that is pushed already has it
+                followed = self._pull_moves(listed, zone)
+                desired = self._desired_events(first_day, zone, followed)
+                result = reconcile(calendar, calendar_id, listed, desired, first_day, zone)
         except (GoogleAuthError, GoogleCalendarError, CalendarSyncTimeZoneError) as e:
             reason = _one_line(str(e))
             self.logger.warning("calendar sync failed for household %s: %s", self.household_id, reason)
@@ -459,7 +570,7 @@ def household_repos(group_id: UUID4, household_id: UUID4) -> Iterator[AllReposit
 def sync_in_background(
     household_id: UUID4 | str, open_repos: Callable[[], AbstractContextManager[AllRepositories]]
 ) -> CalendarSyncResult | None:
-    """Sync one household for a trigger nobody is waiting on: a plan change, or the hourly sweep.
+    """Sync one household for a trigger nobody is waiting on: a plan change, or the sweep.
 
     Goes through the gate, so it is dropped (None) when a sync for the household is already
     waiting. `open_repos` is called only once this run has its turn, so the session it opens is
