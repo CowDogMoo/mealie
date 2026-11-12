@@ -249,16 +249,16 @@ any date edit. The drop logic lives in `composables/use-meal-plan-drag.ts`, whic
 day's list carries its date as `data-date` and each card its entry id as `data-entry-id`. The lists
 do not reorder within a day, because the view orders a day by meal type; an entry keeps its meal
 type when it moves. A card shows on its new day, in its meal-type place, as soon as it is dropped,
-before the save comes back. Every drop on another day is saved, even onto the date the plan still has for the entry,
-because the plan lags behind while an earlier move is being saved. If the save fails the view
-rebuilds its lists from the plan, which puts the card back; to know that, `updateOne` in
-`composables/use-group-mealplan.ts` now returns whether the save landed, the only change this
-feature makes to that upstream file. Verified by hand at 390x844 with touch emulation (iPhone Safari user agent,
-which makes SortableJS use touch events as it does on the phone): a long press and drag moved a
-dinner to another day and to an empty one, both saved and survived a reload, and a quick swipe over
-a card scrolled without lifting it. A mouse drag was not driven by hand, because native
-HTML5 drag-and-drop cannot be synthesized from the browser tooling used; it goes through the same
-SortableJS path the Edit tab has always used.
+before the save comes back. Every drop on another day is saved, even onto the date the plan still
+has for the entry, because the plan lags behind while an earlier move is being saved. If the save
+fails the view rebuilds its lists from the plan, which puts the card back; to know that,
+`updateOne` in `composables/use-group-mealplan.ts` now returns whether the save landed, the only
+change this feature makes to that upstream file. Verified by hand at 390x844 with touch emulation
+(iPhone Safari user agent, which makes SortableJS use touch events as it does on the phone): a long
+press and drag moved a dinner to another day and to an empty one, both saved and survived a reload,
+and a quick swipe over a card scrolled without lifting it. A mouse drag was not driven by hand,
+because native HTML5 drag-and-drop cannot be synthesized from the browser tooling used; it goes
+through the same SortableJS path the Edit tab has always used.
 
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
