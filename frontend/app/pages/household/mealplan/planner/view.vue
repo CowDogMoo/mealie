@@ -112,28 +112,27 @@ const plan = computed<Days[]>(() => {
 });
 
 // Each day's meals, grouped under a heading per meal type, as a list the drag-and-drop can edit.
-// A drop moves the meal into another day's list straight away; it is rebuilt from the plan once
-// the saved move comes back.
+// A drop moves the meal into another day's list straight away; the lists are rebuilt from the plan
+// once the saved move comes back, or at once when the move was not saved.
 const dayMeals = reactive<{ [date: string]: ReadPlanEntry[] }>({});
-watch(
-  () => props.mealplans,
-  (days) => {
-    const keys = new Set<string>();
-    for (const day of days) {
-      const key = format(day.date, "yyyy-MM-dd");
-      keys.add(key);
-      dayMeals[key] = [...day.meals].sort(
-        (a, b) => typeOrder.indexOf(a.entryType ?? "dinner") - typeOrder.indexOf(b.entryType ?? "dinner"),
-      );
+
+function showPlan(days: MealsByDate[]) {
+  const keys = new Set<string>();
+  for (const day of days) {
+    const key = format(day.date, "yyyy-MM-dd");
+    keys.add(key);
+    dayMeals[key] = [...day.meals].sort(
+      (a, b) => typeOrder.indexOf(a.entryType ?? "dinner") - typeOrder.indexOf(b.entryType ?? "dinner"),
+    );
+  }
+  for (const key of Object.keys(dayMeals)) {
+    if (!keys.has(key)) {
+      dayMeals[key] = [];
     }
-    for (const key of Object.keys(dayMeals)) {
-      if (!keys.has(key)) {
-        dayMeals[key] = [];
-      }
-    }
-  },
-  { immediate: true, deep: true },
-);
+  }
+}
+
+watch(() => props.mealplans, showPlan, { immediate: true, deep: true });
 
 function startsSection(meals: ReadPlanEntry[], index: number) {
   return index === 0 || meals[index - 1]?.entryType !== meals[index]?.entryType;
@@ -143,8 +142,11 @@ function typeTitle(type: PlanEntryType | undefined) {
   return i18n.t(`meal-plan.${type ?? "dinner"}`);
 }
 
-function onDrop(evt: MealDropEvent) {
-  return handleMealDrop(evt, props.mealplans, entry => props.actions.updateOne(entry));
+async function onDrop(evt: MealDropEvent) {
+  const saved = await handleMealDrop(evt, props.mealplans, entry => props.actions.updateOne(entry));
+  if (!saved) {
+    showPlan(props.mealplans);
+  }
 }
 
 const isToday = (date: Date) => {

@@ -248,7 +248,12 @@ any date edit. The drop logic lives in `composables/use-meal-plan-drag.ts`, whic
 `handleMealDrop`; the Edit tab is left as upstream has it, with its own drop handler. Each
 day's list carries its date as `data-date` and each card its entry id as `data-entry-id`. The lists
 do not reorder within a day, because the view orders a day by meal type; an entry keeps its meal
-type when it moves. Verified by hand at 390x844 with touch emulation (iPhone Safari user agent,
+type when it moves. A card shows on its new day as soon as it is dropped, before the save comes
+back. Every drop on another day is saved, even onto the date the plan still has for the entry,
+because the plan lags behind while an earlier move is being saved. If the save fails the view
+rebuilds its lists from the plan, which puts the card back; to know that, `updateOne` in
+`composables/use-group-mealplan.ts` now returns whether the save landed, the only change this
+feature makes to that upstream file. Verified by hand at 390x844 with touch emulation (iPhone Safari user agent,
 which makes SortableJS use touch events as it does on the phone): a long press and drag moved a
 dinner to another day and to an empty one, both saved and survived a reload, and a quick swipe over
 a card scrolled without lifting it. A mouse drag was not driven by hand, because native
@@ -292,6 +297,7 @@ frontend/app/lib/api/user/users.ts
 frontend/app/lib/api/user/households.ts
 frontend/app/composables/use-users/index.ts
 frontend/app/composables/use-clear-composable-caches.ts
+frontend/app/composables/use-group-mealplan.ts
 frontend/vitest.config.js
 frontend/app/components/Domain/Recipe/RecipeCard.vue
 frontend/app/components/Domain/Recipe/RecipeCardMobile.vue

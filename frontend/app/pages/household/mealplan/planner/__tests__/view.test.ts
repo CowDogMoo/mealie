@@ -5,15 +5,16 @@ import PlannerView from "../view.vue";
 import type { ReadPlanEntry } from "~/lib/api/types/meal-plan";
 
 // SortableJS needs a real browser to run a drag, so the list is stood in for: it renders the
-// day's meals and lets a test fire the same `end` event Sortable fires when a meal is dropped.
+// day's meals, holds the day's list as its v-model, and lets a test emit what the real list emits
+// when a meal is dropped.
 // vi.mock is hoisted above the imports, so the stand-in has to be built by vi.hoisted too
 const Draggable = vi.hoisted(() => ({
   name: "VueDraggable",
   inheritAttrs: false,
-  emits: ["end"],
-  setup(_props: unknown, { attrs, slots, emit }: any) {
-    return () =>
-      h("div", { ...attrs, "data-test": "day", "onDrop": (evt: Event) => emit("end", (evt as CustomEvent).detail) }, slots.default?.());
+  props: ["modelValue"],
+  emits: ["end", "update:modelValue"],
+  setup(_props: unknown, { attrs, slots }: any) {
+    return () => h("div", { ...attrs, "data-test": "day" }, slots.default?.());
   },
 }));
 
@@ -29,8 +30,10 @@ function meal(id: number, date: string, title: string, entryType: ReadPlanEntry[
   return { id, date, entryType, title, text: "", recipeId: null, groupId: "g", userId: "u", householdId: "h" };
 }
 
-function mountView(mealplans: { date: Date; meals: ReadPlanEntry[] }[]) {
-  const updateOne = vi.fn();
+function mountView(
+  mealplans: { date: Date; meals: ReadPlanEntry[] }[],
+  updateOne = vi.fn((_entry: ReadPlanEntry) => Promise.resolve(true)),
+) {
   const wrapper = mount(PlannerView, {
     props: { mealplans, actions: { updateOne } as never },
     global: {
@@ -47,12 +50,36 @@ function mountView(mealplans: { date: Date; meals: ReadPlanEntry[] }[]) {
   return { wrapper, updateOne };
 }
 
-function dropOn(wrapper: ReturnType<typeof mountView>["wrapper"], from: number, to: number, entryId: number) {
-  const days = wrapper.findAll("[data-test=day]");
+type View = ReturnType<typeof mountView>["wrapper"];
+
+// What the real list does when a meal is dropped: a meal that lands on another day is taken out
+// of the list it was dragged from and put in the list it landed in, and then the list it came from
+// emits `end`.
+async function dropOn(wrapper: View, from: number, to: number, entryId: number) {
+  const days = wrapper.findAllComponents(Draggable);
   const item = days[from].find(`[data-entry-id="${entryId}"]`).element as HTMLElement;
-  days[to].element.dispatchEvent(
-    new CustomEvent("drop", { detail: { item, from: days[from].element, to: days[to].element } }),
-  );
+  if (from !== to) {
+    const source: ReadPlanEntry[] = days[from].props("modelValue");
+    const target: ReadPlanEntry[] = days[to].props("modelValue");
+    days[from].vm.$emit("update:modelValue", source.filter(meal => meal.id !== entryId));
+    days[to].vm.$emit("update:modelValue", [...target, ...source.filter(meal => meal.id === entryId)]);
+  }
+  days[from].vm.$emit("end", { item, from: days[from].element, to: days[to].element });
+  await flushPromises();
+}
+
+function entryIdsByDay(wrapper: View) {
+  return wrapper
+    .findAll("[data-test=day]")
+    .map(day => day.findAll("[data-entry-id]").map(item => item.attributes("data-entry-id")));
+}
+
+function pendingSave() {
+  let finish!: (saved: boolean) => void;
+  const updateOne = vi.fn((_entry: ReadPlanEntry) => new Promise<boolean>((resolve) => {
+    finish = resolve;
+  }));
+  return { updateOne, finish: (saved: boolean) => finish(saved) };
 }
 
 describe("planner view drag and drop", () => {
@@ -91,8 +118,7 @@ describe("planner view drag and drop", () => {
       { date: wednesday, meals: [] },
     ]);
 
-    dropOn(wrapper, 0, 2, 1);
-    await flushPromises();
+    await dropOn(wrapper, 0, 2, 1);
 
     expect(updateOne).toHaveBeenCalledTimes(1);
     expect(updateOne).toHaveBeenCalledWith({ ...tacos, date: "2026-08-19" });
@@ -104,9 +130,64 @@ describe("planner view drag and drop", () => {
       { date: tuesday, meals: [] },
     ]);
 
-    dropOn(wrapper, 0, 0, 1);
-    await flushPromises();
+    await dropOn(wrapper, 0, 0, 1);
 
     expect(updateOne).not.toHaveBeenCalled();
+    expect(entryIdsByDay(wrapper)).toEqual([["1"], []]);
+  });
+
+  test("a saved meal stays on the day it was dropped on", async () => {
+    const save = pendingSave();
+    const { wrapper } = mountView(
+      [
+        { date: monday, meals: [meal(1, "2026-08-17", "Tacos")] },
+        { date: tuesday, meals: [] },
+      ],
+      save.updateOne,
+    );
+
+    await dropOn(wrapper, 0, 1, 1);
+    expect(entryIdsByDay(wrapper)).toEqual([[], ["1"]]);
+
+    save.finish(true);
+    await flushPromises();
+
+    expect(entryIdsByDay(wrapper)).toEqual([[], ["1"]]);
+  });
+
+  test("a meal whose save fails goes back to the day it was dragged from", async () => {
+    const save = pendingSave();
+    const { wrapper } = mountView(
+      [
+        { date: monday, meals: [meal(1, "2026-08-17", "Tacos")] },
+        { date: tuesday, meals: [] },
+      ],
+      save.updateOne,
+    );
+
+    await dropOn(wrapper, 0, 1, 1);
+    expect(entryIdsByDay(wrapper)).toEqual([[], ["1"]]);
+
+    save.finish(false);
+    await flushPromises();
+
+    expect(entryIdsByDay(wrapper)).toEqual([["1"], []]);
+  });
+
+  test("dragging a meal back before its first move is saved saves the move back too", async () => {
+    const tacos = meal(1, "2026-08-17", "Tacos");
+    const { wrapper, updateOne } = mountView(
+      [
+        { date: monday, meals: [tacos] },
+        { date: tuesday, meals: [] },
+      ],
+      pendingSave().updateOne,
+    );
+
+    await dropOn(wrapper, 0, 1, 1);
+    await dropOn(wrapper, 1, 0, 1);
+
+    expect(updateOne).toHaveBeenCalledTimes(2);
+    expect(updateOne).toHaveBeenLastCalledWith({ ...tacos, date: "2026-08-17" });
   });
 });
