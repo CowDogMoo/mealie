@@ -28,11 +28,8 @@
           v-model="mealplansByDate[plan.date.toString()]"
           tag="div"
           handle=".handle"
-          :delay="250"
-          :delay-on-touch-only="true"
-          group="meals"
-          :data-index="index"
-          :data-box="plan.date"
+          v-bind="mealDragOptions"
+          :data-date="format(plan.date, 'yyyy-MM-dd')"
           style="min-height: 150px"
           @end="onMoveCallback"
         >
@@ -41,6 +38,7 @@
             :key="mealplan.id"
             class="my-1"
             :class="{ handle: $vuetify.display.smAndUp }"
+            :data-entry-id="mealplan.id"
           >
             <RecipeCardLineItem
               v-if="mealplan.recipe"
@@ -192,9 +190,10 @@
 
 <script setup lang="ts">
 import { format } from "date-fns";
-import type { SortableEvent } from "sortablejs";
 import { VueDraggable } from "vue-draggable-plus";
 import type { MealsByDate } from "./view.vue";
+import { handleMealDrop, mealDragOptions } from "~/composables/use-meal-plan-drag";
+import type { MealDropEvent } from "~/composables/use-meal-plan-drag";
 import type { useMealplans } from "~/composables/use-group-mealplan";
 import { usePlanTypeOptions, getEntryTypeText } from "~/composables/use-group-mealplan";
 import GroupMealPlanEntryDialog from "~/components/Domain/Household/GroupMealPlanEntryDialog.vue";
@@ -227,19 +226,9 @@ watch(
   { immediate: true, deep: true },
 );
 
-function onMoveCallback(evt: SortableEvent) {
-  // A Meal was moved, set the new date value and make an update request and refresh the meals
-  const fromMealsByIndex = parseInt(evt.from.getAttribute("data-index") ?? "");
-  const toMealsByIndex = parseInt(evt.to.getAttribute("data-index") ?? "");
-
-  if (!isNaN(fromMealsByIndex) && !isNaN(toMealsByIndex)) {
-    const destDate = props.mealplans[toMealsByIndex].date;
-    const mealData = mealplansByDate[destDate.toString()][evt.newIndex as number];
-
-    mealData.date = format(destDate, "yyyy-MM-dd");
-
-    props.actions.updateOne(mealData);
-  }
+function onMoveCallback(evt: MealDropEvent) {
+  // A meal was dropped on a day: give it that day's date and save it, which refreshes the plan
+  return handleMealDrop(evt, props.mealplans, entry => props.actions.updateOne(entry));
 }
 
 // =====================================================

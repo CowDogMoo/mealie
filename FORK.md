@@ -237,6 +237,24 @@ Turning it on is three steps, and only the first needs whoever runs the server:
 3. On `/household/google-calendar`, paste the calendar's id (Settings > Integrate calendar), switch
    the mirror on, save, and press "Sync now" to fill the calendar straight away.
 
+**Drag a meal to another day.** Moving a dinner is a drag on the planner's default "Meal Planner"
+tab, not an edit of the entry's date. Upstream already had dragging, but only on the Edit tab, and
+on a phone only by the little arrows button. Each day on `planner/view.vue` is now a
+`vue-draggable-plus` list (the library the Edit tab already used, in the same `meals` group), a
+whole card is the handle, and dropping it on another day saves the entry with that day's date
+through the same `updateOne` the date field uses, so the calendar sync pushes the move as it would
+any date edit. The drop logic is shared: `composables/use-meal-plan-drag.ts` holds the options
+(touch needs a 250 ms press before a card lifts, so swiping to scroll never picks one up) and
+`handleMealDrop`, and the Edit tab now calls it too instead of its own index bookkeeping. Each
+day's list carries its date as `data-date` and each card its entry id as `data-entry-id`. The lists
+do not reorder within a day, because the view orders a day by meal type; an entry keeps its meal
+type when it moves. Verified by hand at 390x844 with touch emulation (iPhone Safari user agent,
+which makes SortableJS use touch events as it does on the phone): a long press and drag moved a
+dinner to another day and to an empty one, both saved and survived a reload, and a quick swipe over
+a card scrolled without lifting it. A mouse drag was not driven by hand, because native
+HTML5 drag-and-drop cannot be synthesized from the browser tooling used; it goes through the same
+SortableJS path the Edit tab has always used.
+
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
 already reads ≤2 as a dislike and ≥4 as a like, so nothing downstream had to change on day
@@ -281,6 +299,7 @@ frontend/app/components/Domain/Recipe/RecipeCardSection.vue
 frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPage.vue
 frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCard.vue
 frontend/app/pages/household/mealplan/planner/view.vue
+frontend/app/pages/household/mealplan/planner/edit.vue
 frontend/app/pages/shopping-lists/[id].vue
 frontend/app/pages/user/profile/index.vue
 frontend/app/lib/api/user/group-shopping-lists.ts
