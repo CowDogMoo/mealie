@@ -53,8 +53,8 @@ function mountView(
 type View = ReturnType<typeof mountView>["wrapper"];
 
 // What the real list does when a meal is dropped: a meal that lands on another day is taken out
-// of the list it was dragged from and put in the list it landed in, and then the list it came from
-// emits `end`.
+// of the list it was dragged from and put in the list it landed in (here always at the end, as if
+// dropped below the day's last meal), and then the list it came from emits `end`.
 async function dropOn(wrapper: View, from: number, to: number, entryId: number) {
   const days = wrapper.findAllComponents(Draggable);
   const item = days[from].find(`[data-entry-id="${entryId}"]`).element as HTMLElement;
@@ -134,6 +134,19 @@ describe("planner view drag and drop", () => {
 
     expect(updateOne).not.toHaveBeenCalled();
     expect(entryIdsByDay(wrapper)).toEqual([["1"], []]);
+  });
+
+  test("a dropped meal takes its place in the day's meal-type order", async () => {
+    const { wrapper } = mountView([
+      { date: monday, meals: [meal(1, "2026-08-17", "Tacos")] },
+      { date: tuesday, meals: [meal(2, "2026-08-18", "Chili"), meal(3, "2026-08-18", "Rice", "side")] },
+    ]);
+
+    await dropOn(wrapper, 0, 1, 1);
+
+    expect(entryIdsByDay(wrapper)).toEqual([[], ["2", "1", "3"]]);
+    const headings = wrapper.findAll("[data-test=day]")[1].findAll("p").map(heading => heading.text());
+    expect(headings).toEqual(["Dinner", "Side"]);
   });
 
   test("a saved meal stays on the day it was dropped on", async () => {

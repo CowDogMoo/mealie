@@ -112,18 +112,22 @@ const plan = computed<Days[]>(() => {
 });
 
 // Each day's meals, grouped under a heading per meal type, as a list the drag-and-drop can edit.
-// A drop moves the meal into another day's list straight away; the lists are rebuilt from the plan
-// once the saved move comes back, or at once when the move was not saved.
+// A drop moves the meal into another day's list straight away, in its meal-type place; the lists
+// are rebuilt from the plan once the saved move comes back, or at once when the move was not saved.
 const dayMeals = reactive<{ [date: string]: ReadPlanEntry[] }>({});
+
+function inTypeOrder(meals: ReadPlanEntry[]) {
+  return [...meals].sort(
+    (a, b) => typeOrder.indexOf(a.entryType ?? "dinner") - typeOrder.indexOf(b.entryType ?? "dinner"),
+  );
+}
 
 function showPlan(days: MealsByDate[]) {
   const keys = new Set<string>();
   for (const day of days) {
     const key = format(day.date, "yyyy-MM-dd");
     keys.add(key);
-    dayMeals[key] = [...day.meals].sort(
-      (a, b) => typeOrder.indexOf(a.entryType ?? "dinner") - typeOrder.indexOf(b.entryType ?? "dinner"),
-    );
+    dayMeals[key] = inTypeOrder(day.meals);
   }
   for (const key of Object.keys(dayMeals)) {
     if (!keys.has(key)) {
@@ -143,6 +147,11 @@ function typeTitle(type: PlanEntryType | undefined) {
 }
 
 async function onDrop(evt: MealDropEvent) {
+  const key = evt.to.dataset.date;
+  if (key && dayMeals[key]) {
+    dayMeals[key] = inTypeOrder(dayMeals[key]);
+  }
+
   const saved = await handleMealDrop(evt, props.mealplans, entry => props.actions.updateOne(entry));
   if (!saved) {
     showPlan(props.mealplans);
@@ -172,7 +181,6 @@ const isToday = (date: Date) => {
 */
 .meal-drop-zone {
   min-height: 96px;
-  border-radius: 4px;
 }
 
 .meal-drag-item {
