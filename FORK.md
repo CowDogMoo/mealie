@@ -312,7 +312,6 @@ and a quick swipe over a card scrolled without lifting it. A mouse drag was not 
 because native HTML5 drag-and-drop cannot be synthesized from the browser tooling used; it goes
 through the same SortableJS path the Edit tab has always used.
 
-
 One deliberate coupling to know about: a thumbs-down also writes the caster's
 `users_to_recipes.rating` to 1, and a thumbs-up writes 5. The planner's existing `scoreWeek`
 already reads ≤2 as a dislike and ≥4 as a like, so nothing downstream had to change on day
